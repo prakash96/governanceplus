@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.governanceplus</groupId>
+    <artifactId>governanceplus</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+    <name>governanceplus</name>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!--
+          JNI-bound llama.cpp for Java. Loads a native shared library inside the JVM
+          process (no separate executable, no subprocess, no port). Bundles native
+          libs for common platforms inside the jar.
+
+          IMPORTANT: verify the latest groupId/artifactId/version on Maven Central
+          before building — this library moves fast and APIs/coordinates can shift
+          between releases. As of writing it is published as:
+              groupId:    de.kherud
+              artifactId: java-llama.cpp
+          Check https://central.sonatype.com/artifact/de.kherud/java-llama.cpp
+          for the current version and confirm the API calls used in ModelService.java
+          still match (method names/signatures have changed across versions).
+        -->
+        <dependency>
+            <groupId>de.kherud</groupId>
+            <artifactId>llama</artifactId>
+            <version>4.2.0</version>
+        </dependency>
+
+        <!--
+          Pure-Java Git client (Eclipse JGit). Clones/fetches from GitHub,
+          Bitbucket, GitLab, or any standard Git server over HTTPS, with no
+          native `git` executable required on the host machine.
+        -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>6.8.0.202311291450-r</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>governanceplus</finalName>
+        <plugins>
+            <!-- Builds a single runnable jar with dependencies bundled in -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/*.EC</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.governanceplus.reviewer.Main</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

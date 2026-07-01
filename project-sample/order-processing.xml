@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db">
+
+    <sub-flow name="processOrderSubFlow">
+        <db:select config-ref="Database_Config">
+            <db:sql>SELECT * FROM orders WHERE id = :id</db:sql>
+        </db:select>
+        <error-handler>
+            <on-error-continue>
+                <logger message="An error occurred" level="ERROR" />
+            </on-error-continue>
+        </error-handler>
+    </sub-flow>
+
+</mule>

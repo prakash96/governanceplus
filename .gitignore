@@ -1,0 +1,6 @@
+# Build output
+target/
+
+# Local model files — commit only the split zips under models/chunks/
+models/*.gguf
+out/
