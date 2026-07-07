@@ -1,0 +1,5 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core">
+    <flow name="orders-flow">
+        <logger/>
+    </flow>
+</mule>

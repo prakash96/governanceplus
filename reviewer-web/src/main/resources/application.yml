@@ -1,0 +1,39 @@
+server:
+  port: 8081
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+governanceplus:
+  model:
+    # Defaults to a canned mock engine so the server starts and the full
+    # HTTP/UI pipeline can be exercised without a real GGUF model file.
+    # Set to false and provide `path` to use a real model for rule-authoring
+    # assist (see RuleAssistController) — reviews never load it.
+    mock: false
+    path: "../models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    context-size: 4096
+    # 0 = auto-detect (Runtime.availableProcessors()). Previously hardcoded to
+    # 4 regardless of the machine's actual core count — set explicitly to
+    # leave CPU headroom for other work on the same box if needed.
+    threads: 0
+    # Cap on generated tokens per assist response.
+    max-output-tokens: 1024
+  rules:
+    # Resolved relative to the working directory the jar/process is started
+    # from. Default assumes `reviewer-web/` as the working directory (e.g.
+    # `mvn spring-boot:run` from inside reviewer-web), so this resolves to
+    # <repo-root>/rules/rules.json. Override with an absolute path otherwise.
+
+    # The single, authoritative rules.json: XML rules (id/category/severity/xpath),
+    # pomRules (dependency-version checks), and swaggerRules (JSONPath checks
+    # against OpenAPI specs) — consumed by the deterministic
+    # com.governanceplus.reviewer.ruleengine rule engine, and read/written by
+    # RulesFileStore for the Rules management UI. See rules/rules.json.example
+    # for the expected shape; that file is illustrative only, not a real ruleset.
+    path: ../rules/rules.json
+  jobs:
+    ttl-minutes: 120

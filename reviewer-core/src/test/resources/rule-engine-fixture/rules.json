@@ -1,0 +1,23 @@
+{
+  "rules": [
+    {
+      "id": "SEC-001",
+      "category": "Security",
+      "severity": "CRITICAL",
+      "description": "HTTP Listener config must not use plain HTTP protocol",
+      "xpath": "//http:listener-config[@protocol='HTTP']"
+    }
+  ],
+  "pomRules": [
+    { "artifactId": "mule-http-connector", "minVersion": "1.5.0" }
+  ],
+  "swaggerRules": [
+    {
+      "id": "SWAGGER-001",
+      "category": "API Design",
+      "severity": "MAJOR",
+      "description": "GET operations should document a 500 response",
+      "jsonPath": "$.paths[*].get[?(!@.responses['500'])]"
+    }
+  ]
+}

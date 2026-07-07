@@ -6,5 +6,7 @@
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
         ".mule": true
-    }
+    },
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "java.autobuild.enabled": false
 }

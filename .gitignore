@@ -1,5 +1,6 @@
 # Build output
 target/
+dependency-reduced-pom.xml
 
 # Local model files — commit only the split zips under models/chunks/
 models/*.gguf

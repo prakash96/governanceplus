@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation">
+
+    <http:listener-config name="orders-listener-config" protocol="HTTP">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+
+    <flow name="submitOrderFlow">
+        <http:listener config-ref="orders-listener-config" path="/orders" />
+        <logger level="INFO" message="Order received" />
+    </flow>
+</mule>

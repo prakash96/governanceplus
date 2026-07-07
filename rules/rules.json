@@ -1,0 +1,101 @@
+{
+  "rules" : [ {
+    "id" : "MULE039",
+    "category" : "LOGGING",
+    "severity" : "WARN",
+    "description" : "Logger should define log message",
+    "xpath" : "//logger[not(@message)]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "MULE040",
+    "category" : "HTTP",
+    "severity" : "HIGH",
+    "description" : "HTTP listener path must come from properties",
+    "xpath" : "//http:listener[@path and not(contains(@path,'${'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "MULE041",
+    "category" : "BEST_PRACTICE",
+    "severity" : "ERROR",
+    "description" : "HTTP Request should be inside Until-Successful",
+    "xpath" : "//*[local-name()='request' and namespace-uri()='http://www.mulesoft.org/schema/mule/http'][not(ancestor::*[local-name()='until-successful'])]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R005",
+    "category" : "BEST_PRACTICE",
+    "severity" : "WARNING",
+    "description" : "Unused variable",
+    "xpath" : "//*[local-name()='set-variable' or local-name()='dw:set-variable']",
+    "usageAttribute" : "variableName",
+    "usagePattern" : "vars.${variableName}",
+    "projectNamePattern" : null
+  }, {
+    "id" : "R006",
+    "category" : "BEST_PRACTICE",
+    "severity" : "WARNING",
+    "description" : "Until Successful Hardcoding for maxRetries",
+    "xpath" : "//*[local-name()='until-successful' and (@maxRetries or @millisBetweenRetries) and (not(contains(@maxRetries,'${')) or not(contains(@millisBetweenRetries,'${')))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R007",
+    "category" : "BEST_PRACTICE",
+    "severity" : "ERROR",
+    "description" : "Flow naming convention should be lower case with hyphen",
+    "xpath" : "//flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-', '') != '']",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R008",
+    "category" : "BEST_PRACTICE",
+    "severity" : "ERROR",
+    "description" : "Sub-Flow naming convention should be lower case with hyphen",
+    "xpath" : "//sub-flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-', '') != '']",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R009",
+    "category" : "BEST_PRACTICE",
+    "severity" : "ERROR",
+    "description" : "variable naming convention should be camelCase",
+    "xpath" : "//*[local-name()='set-variable' and @variableName and (translate(substring(@variableName, 1, 1), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '') = '' or contains(@variableName, '_') or contains(@variableName, '-') or contains(@variableName, ' ') or translate(@variableName, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', '') != '')]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R009",
+    "category" : "BEST_PRACTICE",
+    "severity" : "ERROR",
+    "description" : "Use tracing module to make requestid as correlationid",
+    "xpath" : "//*[local-name()='apikit:router' or local-name()='router'][not(ancestor::*[local-name()='with-correlation-id' or local-name()='tracing:with-correlation-id'])]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  } ],
+  "pomRules" : [ {
+    "artifactId" : "mule-amqp-connector",
+    "minVersion" : "1.9.0",
+    "projectNamePattern" : null
+  }, {
+    "artifactId" : "mule-http-connector",
+    "minVersion" : "1.3.0",
+    "projectNamePattern" : null
+  } ],
+  "swaggerRules" : [ {
+    "id" : "SWAGGER-001",
+    "category" : "API_DESIGN",
+    "severity" : "WARNING",
+    "description" : "Every operation should document at least one 4xx or 5xx error response",
+    "jsonPath" : "$.paths[*][*][?(!@.responses['400'] && !@.responses['404'] && !@.responses['500'])]",
+    "projectNamePattern" : "*-api"
+  } ]
+}

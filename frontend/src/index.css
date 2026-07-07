@@ -1,0 +1,480 @@
+:root {
+  --text: #2b2b33;
+  --text-muted: #6b6375;
+  --bg: #ffffff;
+  --border: #e5e4e7;
+  --accent: #6b3bff;
+  --error: #c0392b;
+  --code-bg: #f4f3ec;
+
+  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.app-title {
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.app-nav {
+  display: flex;
+  gap: 20px;
+}
+
+.app-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.app-nav a:hover {
+  color: var(--text);
+}
+
+h1 {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 500;
+}
+
+textarea {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+input[type='file'] {
+  padding: 8px 0;
+}
+
+input[type='text'] {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button {
+  align-self: flex-start;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--error);
+  font-weight: 500;
+}
+
+.recent-jobs {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.recent-jobs h2 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.recent-jobs ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+
+.job-id {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.status-completed {
+  color: #2e7d32;
+}
+
+.status-failed {
+  color: var(--error);
+}
+
+.status-running,
+.status-queued {
+  color: #b8860b;
+}
+
+/* --- Rules management page --- */
+
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.rules-table th,
+.rules-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.rules-table code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.rules-table-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.rule-form textarea,
+.rule-form input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rule-form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.test-panel,
+.ask-ai-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.test-panel h3,
+.ask-ai-panel h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.ai-suggestion {
+  margin-top: 10px;
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.ai-suggestion pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0 0 8px;
+}
+
+.explain-cell {
+  max-width: 260px;
+}
+
+.explanation {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+/* --- Report dashboard --- */
+
+.engine-report-section {
+  margin-bottom: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.engine-report-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.engine-report-section > h2 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.engine-report-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.report-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.report-header-actions button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.report-summary {
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+
+.status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--code-bg);
+}
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.stat-pass .stat-number {
+  color: #2e7d32;
+}
+
+.stat-fail .stat-number {
+  color: var(--error);
+}
+
+.stat-warning .stat-number {
+  color: #b8860b;
+}
+
+.severity-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-status-pass {
+  background: #e6f4ea;
+  color: #2e7d32;
+}
+
+.badge-status-fail {
+  background: #fbe9e7;
+  color: var(--error);
+}
+
+.badge-status-warning {
+  background: #fff4d9;
+  color: #8a6100;
+}
+
+.badge-severity-critical {
+  background: #c0392b;
+  color: #fff;
+}
+
+.badge-severity-major {
+  background: #e08a00;
+  color: #fff;
+}
+
+.badge-severity-minor {
+  background: #e5e4e7;
+  color: var(--text);
+}
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.chip {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.chip-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.category-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+}
+
+.category-title {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.category-count {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.finding-row {
+  margin-top: 10px;
+  padding: 10px 0 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.finding-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.finding-rule {
+  flex: 1;
+}
+
+.finding-file {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.finding-details {
+  margin: 8px 0 4px 4px;
+  font-size: 14px;
+}
+
+.finding-recommendation {
+  color: var(--text-muted);
+}
+
+@media print {
+  .no-print,
+  .app-header {
+    display: none !important;
+  }
+
+  .category-group,
+  .finding-row {
+    break-inside: avoid;
+  }
+
+  /* Best-effort: force collapsed <details> content visible when printing
+     (a user may have manually collapsed a category/finding before printing).
+     Supported in current Chromium/Firefox; older engines just print as-is. */
+  details:not([open]) > summary {
+    list-style: none;
+  }
+  details:not([open]) > *:not(summary) {
+    display: block !important;
+  }
+}

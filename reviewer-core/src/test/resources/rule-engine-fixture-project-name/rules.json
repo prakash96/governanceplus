@@ -1,0 +1,29 @@
+{
+  "rules": [
+    {
+      "id": "SCOPED-TO-API",
+      "category": "LOGGING",
+      "severity": "WARNING",
+      "description": "Logger should define log message (api projects only)",
+      "xpath": "//logger[not(@message)]",
+      "projectNamePattern": "*-api"
+    },
+    {
+      "id": "SCOPED-TO-BATCH",
+      "category": "LOGGING",
+      "severity": "WARNING",
+      "description": "Logger should define log message (batch projects only)",
+      "xpath": "//logger[not(@message)]",
+      "projectNamePattern": "*-batch"
+    },
+    {
+      "id": "UNSCOPED",
+      "category": "LOGGING",
+      "severity": "WARNING",
+      "description": "Logger should define log message (all projects)",
+      "xpath": "//logger[not(@message)]"
+    }
+  ],
+  "pomRules": [],
+  "swaggerRules": []
+}
