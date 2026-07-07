@@ -24,7 +24,8 @@ import java.util.List;
  */
 public class ModelService implements ChatEngine, AutoCloseable {
 
-    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 1024;
+    /** Kept modest since generation is CPU-only (see the forced setGpuLayers(0) below) — a big cap makes every response slow. */
+    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 150;
 
     private final LlamaModel model;
     private final int maxOutputTokens;

@@ -53,33 +53,6 @@
     "usageAttribute" : null,
     "usagePattern" : null,
     "projectNamePattern" : null
-  }, {
-    "id" : "R008",
-    "category" : "BEST_PRACTICE",
-    "severity" : "ERROR",
-    "description" : "Sub-Flow naming convention should be lower case with hyphen",
-    "xpath" : "//sub-flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-', '') != '']",
-    "usageAttribute" : null,
-    "usagePattern" : null,
-    "projectNamePattern" : null
-  }, {
-    "id" : "R009",
-    "category" : "BEST_PRACTICE",
-    "severity" : "ERROR",
-    "description" : "variable naming convention should be camelCase",
-    "xpath" : "//*[local-name()='set-variable' and @variableName and (translate(substring(@variableName, 1, 1), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '') = '' or contains(@variableName, '_') or contains(@variableName, '-') or contains(@variableName, ' ') or translate(@variableName, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', '') != '')]",
-    "usageAttribute" : null,
-    "usagePattern" : null,
-    "projectNamePattern" : null
-  }, {
-    "id" : "R009",
-    "category" : "BEST_PRACTICE",
-    "severity" : "ERROR",
-    "description" : "Use tracing module to make requestid as correlationid",
-    "xpath" : "//*[local-name()='apikit:router' or local-name()='router'][not(ancestor::*[local-name()='with-correlation-id' or local-name()='tracing:with-correlation-id'])]",
-    "usageAttribute" : null,
-    "usagePattern" : null,
-    "projectNamePattern" : null
   } ],
   "pomRules" : [ {
     "artifactId" : "mule-amqp-connector",
@@ -94,8 +67,8 @@
     "id" : "SWAGGER-001",
     "category" : "API_DESIGN",
     "severity" : "WARNING",
-    "description" : "Every operation should document at least one 4xx or 5xx error response",
-    "jsonPath" : "$.paths[*][*][?(!@.responses['400'] && !@.responses['404'] && !@.responses['500'])]",
-    "projectNamePattern" : "*-api"
+    "description" : "Every operation should document at least one 400 error response",
+    "jsonPath" : "$.paths.*.*.responses['400']",
+    "projectNamePattern" : ""
   } ]
 }

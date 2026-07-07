@@ -11,13 +11,11 @@ import {
   createSwaggerRule,
   updateSwaggerRule,
   deleteSwaggerRule,
-  testXmlRule,
-  testPomRule,
-  testSwaggerRule,
-  generateRuleSuggestion,
   explainRule,
 } from '../api/client';
-import type { RulesDocument, XmlRule, PomRule, SwaggerRule, RuleTestResult, RuleCategory } from '../api/client';
+import type { RulesDocument, XmlRule, PomRule, SwaggerRule, RuleCategory } from '../api/client';
+import Modal from '../components/Modal';
+import { useAssistAvailability } from '../hooks/useAssistAvailability';
 
 type Tab = 'xml' | 'pom' | 'swagger';
 
@@ -53,6 +51,7 @@ function projectScopeLabel(pattern: string | null | undefined): string {
 }
 
 export default function RulesPage() {
+  const assistAvailable = useAssistAvailability();
   const [doc, setDoc] = useState<RulesDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +72,10 @@ export default function RulesPage() {
       <h1>Rules</h1>
       <p className="subtitle">
         View, add, edit, and delete the rules the review engine checks projects against — XML/Mule
-        flows (XPath), pom.xml dependency versions, and Swagger/OpenAPI specs (JSONPath). Test any
-        rule against pasted sample input before saving it, and use "Ask AI" for help writing or
-        understanding a rule — the AI never decides pass/fail, only the rules below do.
+        flows (XPath), pom.xml dependency versions, and Swagger/OpenAPI specs (JSONPath).{' '}
+        {assistAvailable
+          ? 'Use the "Test Sample" and "Ask AI" pages in the top menu to try an expression or get help drafting one — the AI never decides pass/fail, only the saved rules below do.'
+          : 'Use the "Test Sample" page in the top menu to try an expression against sample input before saving it.'}
       </p>
 
       <div className="filter-chips">
@@ -93,59 +93,14 @@ export default function RulesPage() {
       {error && <p className="error">{error}</p>}
       {loading && <p>Loading rules…</p>}
 
-      {doc && !loading && tab === 'xml' && <XmlRulesPanel rules={doc.rules} onChanged={refresh} />}
-      {doc && !loading && tab === 'pom' && <PomRulesPanel rules={doc.pomRules} onChanged={refresh} />}
-      {doc && !loading && tab === 'swagger' && <SwaggerRulesPanel rules={doc.swaggerRules} onChanged={refresh} />}
-    </div>
-  );
-}
-
-// ---- Ask AI panel, reused by all three categories ----
-
-function AskAiPanel({ category, onInsert }: { category: RuleCategory; onInsert: (suggestion: string) => void }) {
-  const [instruction, setInstruction] = useState('');
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleAsk() {
-    if (!instruction.trim()) return;
-    setAsking(true);
-    setError(null);
-    try {
-      const result = await generateRuleSuggestion(category, instruction.trim());
-      setSuggestion(result);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setAsking(false);
-    }
-  }
-
-  return (
-    <div className="ask-ai-panel">
-      <h3>Ask AI</h3>
-      <p className="subtitle">
-        Describe what you want the rule to check. The suggestion is free text to read and adapt —
-        it's not saved automatically.
-      </p>
-      <textarea
-        rows={2}
-        placeholder="e.g. flag any HTTP listener that doesn't require HTTPS"
-        value={instruction}
-        onChange={(e) => setInstruction(e.target.value)}
-      />
-      <button type="button" onClick={handleAsk} disabled={asking || !instruction.trim()}>
-        {asking ? 'Asking…' : 'Ask AI'}
-      </button>
-      {error && <p className="error">{error}</p>}
-      {suggestion && (
-        <div className="ai-suggestion">
-          <pre>{suggestion}</pre>
-          <button type="button" onClick={() => onInsert(suggestion)}>
-            Copy into description
-          </button>
-        </div>
+      {doc && !loading && tab === 'xml' && (
+        <XmlRulesPanel rules={doc.rules} onChanged={refresh} assistAvailable={!!assistAvailable} />
+      )}
+      {doc && !loading && tab === 'pom' && (
+        <PomRulesPanel rules={doc.pomRules} onChanged={refresh} assistAvailable={!!assistAvailable} />
+      )}
+      {doc && !loading && tab === 'swagger' && (
+        <SwaggerRulesPanel rules={doc.swaggerRules} onChanged={refresh} assistAvailable={!!assistAvailable} />
       )}
     </div>
   );
@@ -170,9 +125,10 @@ function ExplainButton({ category, rule }: { category: RuleCategory; rule: Recor
 
   return (
     <div className="explain-cell">
-      <button type="button" className="chip" onClick={handleExplain} disabled={loading}>
-        {loading ? 'Explaining…' : 'Explain'}
+      <button type="button" className="btn-ghost" onClick={handleExplain} disabled={loading}>
+        {loading ? 'Thinking…' : 'Explain'}
       </button>
+      {loading && <p className="explanation">Can take a while on CPU — this isn't stuck.</p>}
       {error && <p className="error">{error}</p>}
       {explanation && <p className="explanation">{explanation}</p>}
     </div>
@@ -181,25 +137,22 @@ function ExplainButton({ category, rule }: { category: RuleCategory; rule: Recor
 
 // ---- XML rules ----
 
-function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () => void }) {
+function XmlRulesPanel({
+  rules,
+  onChanged,
+  assistAvailable,
+}: {
+  rules: XmlRule[];
+  onChanged: () => void;
+  assistAvailable: boolean;
+}) {
   const [editing, setEditing] = useState<XmlRule | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<RuleTestResult | null>(null);
-  const [sampleXml, setSampleXml] = useState('');
-  const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function startAdd() {
-    setEditing({ ...EMPTY_XML_RULE });
-    setTestResult(null);
-    setShowForm(true);
-  }
-
-  function startEdit(rule: XmlRule) {
-    setEditing({ ...rule });
-    setTestResult(null);
-    setShowForm(true);
+  function closeEditModal() {
+    setEditing(null);
+    setError(null);
   }
 
   async function handleDelete(id: string) {
@@ -209,26 +162,6 @@ function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () =
       onChanged();
     } catch (e) {
       setError((e as Error).message);
-    }
-  }
-
-  async function handleTest() {
-    if (!editing || !sampleXml.trim()) return;
-    setTesting(true);
-    setError(null);
-    try {
-      setTestResult(
-        await testXmlRule({
-          xpath: editing.xpath,
-          usageAttribute: editing.usageAttribute ?? undefined,
-          usagePattern: editing.usagePattern ?? undefined,
-          sampleXml,
-        }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setTesting(false);
     }
   }
 
@@ -244,7 +177,6 @@ function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () =
       } else {
         await createXmlRule(editing);
       }
-      setShowForm(false);
       setEditing(null);
       onChanged();
     } catch (e) {
@@ -281,13 +213,13 @@ function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () =
               </td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="chip" onClick={() => startEdit(rule)}>
+                <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
                   Edit
                 </button>
-                <button type="button" className="chip" onClick={() => handleDelete(rule.id)}>
+                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
                   Delete
                 </button>
-                <ExplainButton category="xml" rule={rule as unknown as Record<string, unknown>} />
+                {assistAvailable && <ExplainButton category="xml" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
           ))}
@@ -299,97 +231,72 @@ function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () =
         </tbody>
       </table>
 
-      {!showForm && (
-        <button type="button" onClick={startAdd}>
-          Add XML rule
-        </button>
-      )}
+      <button type="button" onClick={() => setEditing({ ...EMPTY_XML_RULE })}>
+        Add XML rule
+      </button>
 
-      {showForm && editing && (
-        <form className="rule-form" onSubmit={handleSave}>
-          <h2>{rules.some((r) => r.id === editing.id) ? 'Edit' : 'Add'} XML rule</h2>
-          <label className="field">
-            <span>ID</span>
-            <input value={editing.id} onChange={(e) => setEditing({ ...editing, id: e.target.value })} required />
-          </label>
-          <label className="field">
-            <span>Category</span>
-            <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Severity</span>
-            <input value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Description</span>
-            <input
-              value={editing.description}
-              onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+      {editing && (
+        <Modal
+          title={rules.some((r) => r.id === editing.id) ? 'Edit XML rule' : 'Add XML rule'}
+          onClose={closeEditModal}
+        >
+          <form className="rule-form" onSubmit={handleSave}>
+            <label className="field">
+              <span>ID</span>
+              <input value={editing.id} onChange={(e) => setEditing({ ...editing, id: e.target.value })} required />
+            </label>
+            <label className="field">
+              <span>Category</span>
+              <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>Severity</span>
+              <input value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>Description</span>
+              <input
+                value={editing.description}
+                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>XPath</span>
+              <textarea rows={3} value={editing.xpath} onChange={(e) => setEditing({ ...editing, xpath: e.target.value })} required />
+            </label>
+            <details>
+              <summary>Advanced: cross-file usage check</summary>
+              <label className="field">
+                <span>Usage attribute (e.g. variableName)</span>
+                <input
+                  value={editing.usageAttribute ?? ''}
+                  onChange={(e) => setEditing({ ...editing, usageAttribute: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <span>Usage pattern (e.g. vars.$&#123;variableName&#125;)</span>
+                <input
+                  value={editing.usagePattern ?? ''}
+                  onChange={(e) => setEditing({ ...editing, usagePattern: e.target.value })}
+                />
+              </label>
+            </details>
+
+            <ProjectNamePatternField
+              value={editing.projectNamePattern}
+              onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
             />
-          </label>
-          <label className="field">
-            <span>XPath</span>
-            <textarea rows={3} value={editing.xpath} onChange={(e) => setEditing({ ...editing, xpath: e.target.value })} required />
-          </label>
-          <details>
-            <summary>Advanced: cross-file usage check</summary>
-            <label className="field">
-              <span>Usage attribute (e.g. variableName)</span>
-              <input
-                value={editing.usageAttribute ?? ''}
-                onChange={(e) => setEditing({ ...editing, usageAttribute: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              <span>Usage pattern (e.g. vars.$&#123;variableName&#125;)</span>
-              <input
-                value={editing.usagePattern ?? ''}
-                onChange={(e) => setEditing({ ...editing, usagePattern: e.target.value })}
-              />
-            </label>
-          </details>
 
-          <ProjectNamePatternField
-            value={editing.projectNamePattern}
-            onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
-          />
-
-          <section className="test-panel">
-            <h3>Test on sample</h3>
-            <p className="subtitle">
-              Paste a full XML document (with any xmlns: prefixes your XPath uses declared on the
-              root element).
-            </p>
-            <textarea rows={8} className="rules-json" value={sampleXml} onChange={(e) => setSampleXml(e.target.value)} />
-            <button type="button" onClick={handleTest} disabled={testing || !sampleXml.trim()}>
-              {testing ? 'Testing…' : 'Run test'}
-            </button>
-            {testResult && (
-              <p className={testResult.matched ? 'error' : ''}>
-                {testResult.matched
-                  ? `Matched — ${testResult.violations.length} violation(s) would be reported.`
-                  : 'No match — this rule would not flag the sample.'}
-              </p>
-            )}
-          </section>
-
-          <AskAiPanel category="xml" onInsert={(s) => setEditing({ ...editing, description: s })} />
-
-          <div className="rule-form-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+            <div className="rule-form-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={closeEditModal}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </section>
   );
@@ -397,28 +304,29 @@ function XmlRulesPanel({ rules, onChanged }: { rules: XmlRule[]; onChanged: () =
 
 // ---- POM rules ----
 
-function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () => void }) {
+function PomRulesPanel({
+  rules,
+  onChanged,
+  assistAvailable,
+}: {
+  rules: PomRule[];
+  onChanged: () => void;
+  assistAvailable: boolean;
+}) {
   const [editing, setEditing] = useState<PomRule | null>(null);
   const [originalArtifactId, setOriginalArtifactId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<RuleTestResult | null>(null);
-  const [samplePom, setSamplePom] = useState('');
-  const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  function startAdd() {
-    setEditing({ ...EMPTY_POM_RULE });
-    setOriginalArtifactId(null);
-    setTestResult(null);
-    setShowForm(true);
-  }
 
   function startEdit(rule: PomRule) {
     setEditing({ ...rule });
     setOriginalArtifactId(rule.artifactId);
-    setTestResult(null);
-    setShowForm(true);
+  }
+
+  function closeEditModal() {
+    setEditing(null);
+    setOriginalArtifactId(null);
+    setError(null);
   }
 
   async function handleDelete(artifactId: string) {
@@ -428,19 +336,6 @@ function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () =
       onChanged();
     } catch (e) {
       setError((e as Error).message);
-    }
-  }
-
-  async function handleTest() {
-    if (!editing || !samplePom.trim()) return;
-    setTesting(true);
-    setError(null);
-    try {
-      setTestResult(await testPomRule({ artifactId: editing.artifactId, minVersion: editing.minVersion, samplePom }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setTesting(false);
     }
   }
 
@@ -455,8 +350,7 @@ function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () =
       } else {
         await createPomRule(editing);
       }
-      setShowForm(false);
-      setEditing(null);
+      closeEditModal();
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -484,13 +378,13 @@ function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () =
               <td>{rule.minVersion}</td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="chip" onClick={() => startEdit(rule)}>
+                <button type="button" className="btn-ghost" onClick={() => startEdit(rule)}>
                   Edit
                 </button>
-                <button type="button" className="chip" onClick={() => handleDelete(rule.artifactId)}>
+                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.artifactId)}>
                   Delete
                 </button>
-                <ExplainButton category="pom" rule={rule as unknown as Record<string, unknown>} />
+                {assistAvailable && <ExplainButton category="pom" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
           ))}
@@ -502,62 +396,37 @@ function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () =
         </tbody>
       </table>
 
-      {!showForm && (
-        <button type="button" onClick={startAdd}>
-          Add pom rule
-        </button>
-      )}
+      <button type="button" onClick={() => setEditing({ ...EMPTY_POM_RULE })}>
+        Add pom rule
+      </button>
 
-      {showForm && editing && (
-        <form className="rule-form" onSubmit={handleSave}>
-          <h2>{originalArtifactId ? 'Edit' : 'Add'} pom rule</h2>
-          <label className="field">
-            <span>Artifact ID</span>
-            <input value={editing.artifactId} onChange={(e) => setEditing({ ...editing, artifactId: e.target.value })} required />
-          </label>
-          <label className="field">
-            <span>Minimum version</span>
-            <input value={editing.minVersion} onChange={(e) => setEditing({ ...editing, minVersion: e.target.value })} required />
-          </label>
+      {editing && (
+        <Modal title={originalArtifactId ? 'Edit pom rule' : 'Add pom rule'} onClose={closeEditModal}>
+          <form className="rule-form" onSubmit={handleSave}>
+            <label className="field">
+              <span>Artifact ID</span>
+              <input value={editing.artifactId} onChange={(e) => setEditing({ ...editing, artifactId: e.target.value })} required />
+            </label>
+            <label className="field">
+              <span>Minimum version</span>
+              <input value={editing.minVersion} onChange={(e) => setEditing({ ...editing, minVersion: e.target.value })} required />
+            </label>
 
-          <ProjectNamePatternField
-            value={editing.projectNamePattern}
-            onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
-          />
+            <ProjectNamePatternField
+              value={editing.projectNamePattern}
+              onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
+            />
 
-          <section className="test-panel">
-            <h3>Test on sample</h3>
-            <p className="subtitle">Paste a full, valid pom.xml.</p>
-            <textarea rows={8} className="rules-json" value={samplePom} onChange={(e) => setSamplePom(e.target.value)} />
-            <button type="button" onClick={handleTest} disabled={testing || !samplePom.trim()}>
-              {testing ? 'Testing…' : 'Run test'}
-            </button>
-            {testResult && (
-              <p className={testResult.matched ? 'error' : ''}>
-                {testResult.matched
-                  ? `Matched — ${testResult.violations.length} violation(s) would be reported.`
-                  : 'No match — this rule would not flag the sample.'}
-              </p>
-            )}
-          </section>
-
-          <AskAiPanel category="pom" onInsert={(s) => setEditing({ ...editing, minVersion: editing.minVersion || s })} />
-
-          <div className="rule-form-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+            <div className="rule-form-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={closeEditModal}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </section>
   );
@@ -565,25 +434,22 @@ function PomRulesPanel({ rules, onChanged }: { rules: PomRule[]; onChanged: () =
 
 // ---- Swagger rules ----
 
-function SwaggerRulesPanel({ rules, onChanged }: { rules: SwaggerRule[]; onChanged: () => void }) {
+function SwaggerRulesPanel({
+  rules,
+  onChanged,
+  assistAvailable,
+}: {
+  rules: SwaggerRule[];
+  onChanged: () => void;
+  assistAvailable: boolean;
+}) {
   const [editing, setEditing] = useState<SwaggerRule | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<RuleTestResult | null>(null);
-  const [sampleSpec, setSampleSpec] = useState('');
-  const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function startAdd() {
-    setEditing({ ...EMPTY_SWAGGER_RULE });
-    setTestResult(null);
-    setShowForm(true);
-  }
-
-  function startEdit(rule: SwaggerRule) {
-    setEditing({ ...rule });
-    setTestResult(null);
-    setShowForm(true);
+  function closeEditModal() {
+    setEditing(null);
+    setError(null);
   }
 
   async function handleDelete(id: string) {
@@ -593,19 +459,6 @@ function SwaggerRulesPanel({ rules, onChanged }: { rules: SwaggerRule[]; onChang
       onChanged();
     } catch (e) {
       setError((e as Error).message);
-    }
-  }
-
-  async function handleTest() {
-    if (!editing || !sampleSpec.trim()) return;
-    setTesting(true);
-    setError(null);
-    try {
-      setTestResult(await testSwaggerRule({ jsonPath: editing.jsonPath, sampleSpec }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setTesting(false);
     }
   }
 
@@ -621,7 +474,6 @@ function SwaggerRulesPanel({ rules, onChanged }: { rules: SwaggerRule[]; onChang
       } else {
         await createSwaggerRule(editing);
       }
-      setShowForm(false);
       setEditing(null);
       onChanged();
     } catch (e) {
@@ -658,13 +510,13 @@ function SwaggerRulesPanel({ rules, onChanged }: { rules: SwaggerRule[]; onChang
               </td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="chip" onClick={() => startEdit(rule)}>
+                <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
                   Edit
                 </button>
-                <button type="button" className="chip" onClick={() => handleDelete(rule.id)}>
+                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
                   Delete
                 </button>
-                <ExplainButton category="swagger" rule={rule as unknown as Record<string, unknown>} />
+                {assistAvailable && <ExplainButton category="swagger" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
           ))}
@@ -676,77 +528,55 @@ function SwaggerRulesPanel({ rules, onChanged }: { rules: SwaggerRule[]; onChang
         </tbody>
       </table>
 
-      {!showForm && (
-        <button type="button" onClick={startAdd}>
-          Add swagger rule
-        </button>
-      )}
+      <button type="button" onClick={() => setEditing({ ...EMPTY_SWAGGER_RULE })}>
+        Add swagger rule
+      </button>
 
-      {showForm && editing && (
-        <form className="rule-form" onSubmit={handleSave}>
-          <h2>{rules.some((r) => r.id === editing.id) ? 'Edit' : 'Add'} swagger rule</h2>
-          <label className="field">
-            <span>ID</span>
-            <input value={editing.id} onChange={(e) => setEditing({ ...editing, id: e.target.value })} required />
-          </label>
-          <label className="field">
-            <span>Category</span>
-            <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Severity</span>
-            <input value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value })} />
-          </label>
-          <label className="field">
-            <span>Description</span>
-            <input
-              value={editing.description}
-              onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+      {editing && (
+        <Modal
+          title={rules.some((r) => r.id === editing.id) ? 'Edit swagger rule' : 'Add swagger rule'}
+          onClose={closeEditModal}
+        >
+          <form className="rule-form" onSubmit={handleSave}>
+            <label className="field">
+              <span>ID</span>
+              <input value={editing.id} onChange={(e) => setEditing({ ...editing, id: e.target.value })} required />
+            </label>
+            <label className="field">
+              <span>Category</span>
+              <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>Severity</span>
+              <input value={editing.severity} onChange={(e) => setEditing({ ...editing, severity: e.target.value })} />
+            </label>
+            <label className="field">
+              <span>Description</span>
+              <input
+                value={editing.description}
+                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>JSONPath</span>
+              <textarea rows={3} value={editing.jsonPath} onChange={(e) => setEditing({ ...editing, jsonPath: e.target.value })} required />
+            </label>
+
+            <ProjectNamePatternField
+              value={editing.projectNamePattern}
+              onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
             />
-          </label>
-          <label className="field">
-            <span>JSONPath</span>
-            <textarea rows={3} value={editing.jsonPath} onChange={(e) => setEditing({ ...editing, jsonPath: e.target.value })} required />
-          </label>
 
-          <ProjectNamePatternField
-            value={editing.projectNamePattern}
-            onChange={(v) => setEditing({ ...editing, projectNamePattern: v })}
-          />
-
-          <section className="test-panel">
-            <h3>Test on sample</h3>
-            <p className="subtitle">Paste a full OpenAPI spec (YAML or JSON).</p>
-            <textarea rows={8} className="rules-json" value={sampleSpec} onChange={(e) => setSampleSpec(e.target.value)} />
-            <button type="button" onClick={handleTest} disabled={testing || !sampleSpec.trim()}>
-              {testing ? 'Testing…' : 'Run test'}
-            </button>
-            {testResult && (
-              <p className={testResult.matched ? 'error' : ''}>
-                {testResult.matched
-                  ? `Matched — ${testResult.violations.length} violation(s) would be reported.`
-                  : 'No match — this rule would not flag the sample.'}
-              </p>
-            )}
-          </section>
-
-          <AskAiPanel category="swagger" onInsert={(s) => setEditing({ ...editing, description: s })} />
-
-          <div className="rule-form-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+            <div className="rule-form-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={closeEditModal}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </section>
   );

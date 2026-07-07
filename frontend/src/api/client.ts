@@ -32,6 +32,9 @@ async function readErrorMessage(res: Response): Promise<string> {
   return text || `Request failed with status ${res.status}`;
 }
 
+/** Thrown by fetchJob specifically for a 404, so callers can tell "gone" apart from other failures. */
+export class JobNotFoundError extends Error {}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -59,6 +62,9 @@ export async function submitReview(source: ProjectSource): Promise<ReviewJobResp
 
 export async function fetchJob(jobId: string): Promise<ReviewJobResponse> {
   const res = await fetch(`${API_BASE}/api/reviews/${jobId}`);
+  if (res.status === 404) {
+    throw new JobNotFoundError(await readErrorMessage(res));
+  }
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
@@ -170,6 +176,11 @@ export function testSwaggerRule(params: { jsonPath: string; sampleSpec: string }
 // ---- AI assist: helps author or explain a rule; never used in the review pipeline itself ----
 
 export type RuleCategory = 'xml' | 'pom' | 'swagger';
+
+/** False when the server has no usable model configured (e.g. governanceplus.model.path unset/missing). */
+export function fetchAssistAvailable(): Promise<boolean> {
+  return requestJson<{ available: boolean }>('/api/rules/assist/status').then((r) => r.available);
+}
 
 export function generateRuleSuggestion(category: RuleCategory, instruction: string): Promise<string> {
   return requestJson<{ suggestion: string }>('/api/rules/assist/generate', {

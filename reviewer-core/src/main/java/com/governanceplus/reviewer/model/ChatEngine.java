@@ -9,4 +9,9 @@ package com.governanceplus.reviewer.model;
 public interface ChatEngine {
 
     String chat(String message);
+
+    /** False when there's no usable model behind this engine (e.g. none configured/found) — {@link #chat} would just fail. */
+    default boolean isAvailable() {
+        return true;
+    }
 }

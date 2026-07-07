@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchJob } from '../api/client';
+import { fetchJob, JobNotFoundError } from '../api/client';
 import type { ReviewJobResponse } from '../api/client';
+import { removeRecentJob } from '../recentJobs';
 import EngineReportSection from '../components/EngineReportSection';
 
 const POLL_INTERVAL_MS = 2000;
@@ -25,7 +26,13 @@ export default function ReviewResultPage() {
           timerRef.current = window.setTimeout(poll, POLL_INTERVAL_MS);
         }
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (cancelled) return;
+        if (e instanceof JobNotFoundError) {
+          removeRecentJob(jobId!);
+          setError('This review no longer exists — it may have expired or the server was restarted.');
+        } else {
+          setError((e as Error).message);
+        }
       }
     }
 
@@ -71,10 +78,16 @@ export default function ReviewResultPage() {
       </div>
 
       {(job.status === 'QUEUED' || job.status === 'RUNNING') && (
-        <p>Working on it — this page updates automatically.</p>
+        <div className="card">
+          <p>Working on it — this page updates automatically.</p>
+        </div>
       )}
 
-      {job.status === 'FAILED' && <p className="error">{job.errorMessage}</p>}
+      {job.status === 'FAILED' && (
+        <div className="card">
+          <p className="error">{job.errorMessage}</p>
+        </div>
+      )}
 
       {job.status === 'COMPLETED' && (
         <EngineReportSection

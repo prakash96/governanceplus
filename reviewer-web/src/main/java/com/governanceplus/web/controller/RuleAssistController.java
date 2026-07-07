@@ -5,7 +5,9 @@ import com.governanceplus.web.dto.assist.RuleAssistExplainRequest;
 import com.governanceplus.web.dto.assist.RuleAssistExplainResponse;
 import com.governanceplus.web.dto.assist.RuleAssistGenerateRequest;
 import com.governanceplus.web.dto.assist.RuleAssistGenerateResponse;
+import com.governanceplus.web.dto.assist.RuleAssistStatusResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,8 +33,14 @@ public class RuleAssistController {
         this.chatEngine = chatEngine;
     }
 
+    @GetMapping("/status")
+    public RuleAssistStatusResponse status() {
+        return new RuleAssistStatusResponse(chatEngine.isAvailable());
+    }
+
     @PostMapping("/generate")
     public RuleAssistGenerateResponse generate(@RequestBody RuleAssistGenerateRequest request) {
+        requireAvailable();
         if (request.getInstruction() == null || request.getInstruction().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "instruction must not be blank");
         }
@@ -49,6 +57,7 @@ public class RuleAssistController {
 
     @PostMapping("/explain")
     public RuleAssistExplainResponse explain(@RequestBody RuleAssistExplainRequest request) {
+        requireAvailable();
         if (request.getRule() == null || request.getRule().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rule must not be empty");
         }
@@ -59,6 +68,13 @@ public class RuleAssistController {
                 + "Explain in plain English what this rule checks and why it might matter. Respond in plain text.";
 
         return new RuleAssistExplainResponse(chatEngine.chat(prompt));
+    }
+
+    private void requireAvailable() {
+        if (!chatEngine.isAvailable()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI assist is not available on this server (no model configured/found)");
+        }
     }
 
     private String describeCategory(String category) {

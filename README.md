@@ -233,7 +233,7 @@ Key config (`application.yml`):
 | `governanceplus.model.path` | `""` | Path to a `.gguf` file (required when `mock=false`) |
 | `governanceplus.model.context-size` | `4096` | Context window size in tokens |
 | `governanceplus.model.threads` | `0` | CPU threads for inference; `0` = auto-detect (all available processors) |
-| `governanceplus.model.max-output-tokens` | `1024` | Cap on generated tokens per assist response |
+| `governanceplus.model.max-output-tokens` | `150` | Cap on generated tokens per assist response — kept modest since generation is CPU-only (measured ~3-4 tokens/sec with a 3B Q4 model on modest hardware); raise it for longer answers at the cost of slower responses |
 | `governanceplus.rules.path` | `../rules/rules.json` | The single, authoritative rules.json (XML/pom/Swagger rules) — read by the rule engine and by the Rules management UI |
 | `governanceplus.jobs.ttl-minutes` | `120` | How long a completed review job is kept in memory before being purged |
 
