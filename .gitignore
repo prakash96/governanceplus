@@ -2,6 +2,10 @@
 target/
 dependency-reduced-pom.xml
 
+# Frontend build output copied into source by reviewer-web's Maven build
+# (see reviewer-web/pom.xml copy-frontend-build execution) — generated, not authored.
+reviewer-web/src/main/resources/static/
+
 # Local model files — commit only the split zips under models/chunks/
 models/*.gguf
 out/

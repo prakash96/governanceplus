@@ -41,8 +41,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
   if (!res.ok) throw new Error(await readErrorMessage(res));
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  // Empty-body success responses (204, or a void-returning endpoint that Spring
+  // serializes as 200 with nothing to parse) — check the actual body, not just
+  // the status code, so this doesn't break if a handler's response shape changes.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export type ProjectSource = { kind: 'zip'; file: File } | { kind: 'path'; projectPath: string };

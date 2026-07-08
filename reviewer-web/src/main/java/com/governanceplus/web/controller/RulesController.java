@@ -5,6 +5,7 @@ import com.governanceplus.web.dto.rules.RulesDocument;
 import com.governanceplus.web.dto.rules.SwaggerRuleDto;
 import com.governanceplus.web.dto.rules.XmlRuleDto;
 import com.governanceplus.web.service.RulesFileStore;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -46,6 +48,7 @@ public class RulesController {
     }
 
     @DeleteMapping("/xml/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteXmlRule(@PathVariable String id) {
         rulesFileStore.deleteXmlRule(id);
     }
@@ -61,6 +64,7 @@ public class RulesController {
     }
 
     @DeleteMapping("/pom/{artifactId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePomRule(@PathVariable String artifactId) {
         rulesFileStore.deletePomRule(artifactId);
     }
@@ -76,6 +80,7 @@ public class RulesController {
     }
 
     @DeleteMapping("/swagger/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteSwaggerRule(@PathVariable String id) {
         rulesFileStore.deleteSwaggerRule(id);
     }

@@ -13,12 +13,21 @@ import java.io.IOException;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    /** Allows the React dev server (Vite, typically localhost:5173) to call the API directly. */
+    /**
+     * Allows the React dev server (Vite, typically localhost:5173) to call the
+     * API directly — Vite's dev proxy forwards the original Origin header, so
+     * Spring still sees these as cross-origin even though the browser only
+     * ever talks to Vite. Must list every HTTP method any endpoint uses (the
+     * Rules CRUD API added PUT/DELETE after this was first written) — a
+     * missing method here doesn't 404, it fails with an opaque CORS 403 that
+     * only shows up in the separate-dev-server workflow, never in the bundled
+     * single-origin jar.
+     */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOriginPatterns("http://localhost:*")
-                .allowedMethods("GET", "POST")
+                .allowedMethods("GET", "POST", "PUT", "DELETE")
                 .allowedHeaders("*");
     }
 

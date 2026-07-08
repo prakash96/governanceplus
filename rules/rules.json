@@ -53,6 +53,15 @@
     "usageAttribute" : null,
     "usagePattern" : null,
     "projectNamePattern" : null
+  }, {
+    "id" : "UI-DEL-TEST",
+    "category" : "Test",
+    "severity" : "MINOR",
+    "description" : "tmp",
+    "xpath" : "//foo",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
   } ],
   "pomRules" : [ {
     "artifactId" : "mule-amqp-connector",
