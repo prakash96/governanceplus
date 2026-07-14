@@ -1,34 +1,34 @@
 {
   "rules" : [ {
-    "id" : "MULE039",
-    "category" : "LOGGING",
-    "severity" : "WARN",
-    "description" : "Logger should define log message",
-    "xpath" : "//logger[not(@message)]",
-    "usageAttribute" : null,
-    "usagePattern" : null,
-    "projectNamePattern" : null
-  }, {
-    "id" : "MULE040",
-    "category" : "HTTP",
-    "severity" : "HIGH",
-    "description" : "HTTP listener path must come from properties",
-    "xpath" : "//http:listener[@path and not(contains(@path,'${'))]",
-    "usageAttribute" : null,
-    "usagePattern" : null,
-    "projectNamePattern" : null
-  }, {
-    "id" : "MULE041",
-    "category" : "BEST_PRACTICE",
+    "id" : "R001",
+    "category" : "PAPI_SAPI",
     "severity" : "ERROR",
-    "description" : "HTTP Request should be inside Until-Successful",
+    "description" : "Trust store is insecure",
+    "xpath" : "//tls:trust-store[@insecure and contains(@insecure,'true')]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R002",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "HTTP listener path must come from properties",
+    "xpath" : "//http:listener[@path and not(contains(@path,'${')) and not(contains(@path,'p('))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R003",
+    "category" : "SAPI",
+    "severity" : "WARNING",
+    "description" : "HTTP Request should be inside Until-Successful, Set retries 0 in properties if no retry required",
     "xpath" : "//*[local-name()='request' and namespace-uri()='http://www.mulesoft.org/schema/mule/http'][not(ancestor::*[local-name()='until-successful'])]",
     "usageAttribute" : null,
     "usagePattern" : null,
-    "projectNamePattern" : null
+    "projectNamePattern" : "*sapi"
   }, {
-    "id" : "R005",
-    "category" : "BEST_PRACTICE",
+    "id" : "R004",
+    "category" : "PAPI_SAPI",
     "severity" : "WARNING",
     "description" : "Unused variable",
     "xpath" : "//*[local-name()='set-variable' or local-name()='dw:set-variable']",
@@ -36,40 +36,166 @@
     "usagePattern" : "vars.${variableName}",
     "projectNamePattern" : null
   }, {
-    "id" : "R006",
-    "category" : "BEST_PRACTICE",
-    "severity" : "WARNING",
+    "id" : "R005",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
     "description" : "Until Successful Hardcoding for maxRetries",
     "xpath" : "//*[local-name()='until-successful' and (@maxRetries or @millisBetweenRetries) and (not(contains(@maxRetries,'${')) or not(contains(@millisBetweenRetries,'${')))]",
     "usageAttribute" : null,
     "usagePattern" : null,
     "projectNamePattern" : null
   }, {
-    "id" : "R007",
-    "category" : "BEST_PRACTICE",
-    "severity" : "ERROR",
+    "id" : "R006",
+    "category" : "",
+    "severity" : "PAPI_SAPI",
     "description" : "Flow naming convention should be lower case with hyphen",
-    "xpath" : "//flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-', '') != '']",
+    "xpath" : "//flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-123456789', '') != '' or translate(@name, 'abcdefghijklmnopqrstuvwxyz\\', '') != '']",
     "usageAttribute" : null,
     "usagePattern" : null,
     "projectNamePattern" : null
   }, {
-    "id" : "UI-DEL-TEST",
-    "category" : "Test",
-    "severity" : "MINOR",
-    "description" : "tmp",
-    "xpath" : "//foo",
+    "id" : "R007",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "Sub-Flow naming convention should be lower case with hyphen",
+    "xpath" : "//sub-flow[@name != translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') or translate(@name, 'abcdefghijklmnopqrstuvwxyz-123456789', '') != '' or translate(@name, 'abcdefghijklmnopqrstuvwxyz\\', '') != '']",
     "usageAttribute" : null,
     "usagePattern" : null,
     "projectNamePattern" : null
-  } ],
-  "pomRules" : [ {
-    "artifactId" : "mule-amqp-connector",
-    "minVersion" : "1.9.0",
+  }, {
+    "id" : "R008",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "variable naming convention should be camelCase",
+    "xpath" : "//*[local-name()='set-variable' and @variableName and (translate(substring(@variableName, 1, 1), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '') = '' or contains(@variableName, '_') or contains(@variableName, '-') or contains(@variableName, ' ') or translate(@variableName, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', '') != '')]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
     "projectNamePattern" : null
   }, {
-    "artifactId" : "mule-http-connector",
-    "minVersion" : "1.3.0",
+    "id" : "R009",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Use tracing module to make requestid as correlationid",
+    "xpath" : "//*[local-name()='apikit:router' or local-name()='router'][not(ancestor::*[local-name()='with-correlation-id' or local-name()='tracing:with-correlation-id'])]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : "*papi"
+  }, {
+    "id" : "R011",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Http request should pass client_id header to SAPI",
+    "xpath" : "//http:request[not (contains (., 'client_id'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : "*papi"
+  }, {
+    "id" : "R012",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Http request should pass client_secret header to SAPI",
+    "xpath" : "//http:request[not (contains (., 'client_secret'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : "*papi"
+  }, {
+    "id" : "R013",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Mocking code should be removed",
+    "xpath" : "//http:request[(contains (., 'x-control-flow')) or (contains (., 'X-Control-Flow'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R014",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Http request should pass journey_id header to SAPI",
+    "xpath" : "//http:request[not (contains (., 'journeyId'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R015",
+    "category" : "PAPI",
+    "severity" : "ERROR",
+    "description" : "Http request should pass journey_name header to SAPI",
+    "xpath" : "//http:request[not (contains (., 'journeyName'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R016",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "BEFORE_REQUEST logger should be there before http call",
+    "xpath" : "//http:request[not (preceding-sibling::module-json-logger-extension:logger[@tracePoint = 'BEFORE_REQUEST']) and not (ancestor::*[(preceding-sibling::module-json-logger-extension:logger[@tracePoint = 'BEFORE_REQUEST'])])]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R017",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "AFTER_REQUEST logger should be there after http call",
+    "xpath" : "//http:request[not (following-sibling::module-json-logger-extension:logger[@tracePoint = 'AFTER_REQUEST']) and not (following-sibling::module-json-logger-extension:logger[@tracePoint = 'AFTER_TRANSFORM']) and not (ancestor::*[(following-sibling::module-json-logger-extension:logger[@tracePoint = 'AFTER_REQUEST'])]) and not (ancestor::*[(following-sibling::module-json-logger-extension:logger[@tracePoint = 'AFTER_TRANSFORM'])])]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R018",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "testConnectionOnCheckout should be true for connection pool",
+    "xpath" : "//db:pooling-profile[@testConnectionOnCheckout and (contains(@testConnectionOnCheckout,'false'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R019",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "maxIdleTime should be defined for connection pool",
+    "xpath" : "//db:pooling-profile[not (@maxIdleTime)]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R020",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "Create seaprate AMQP_Config for listner, existing will be used by publisher",
+    "xpath" : "//amqp:listener[@config-ref='AMQP_Config']",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R021",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "Define the prefetch count for amqp listener",
+    "xpath" : "//amqp:listener[not (amqp:listener-quality-of-service-config)]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R022",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "Prefetch count should come from properties file",
+    "xpath" : "//amqp:listener-quality-of-service-config[not (contains(@prefetchCount, '${')) and not (contains(@prefetchCount, 'p(') )]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
+    "projectNamePattern" : null
+  }, {
+    "id" : "R023",
+    "category" : "PAPI_SAPI",
+    "severity" : "ERROR",
+    "description" : "Tracepoint of first logger of flow/subflow should be either start or before",
+    "xpath" : "//module-json-logger-extension:logger[not(preceding-sibling::*) and parent::*[local-name()='flow' or local-name()='sub-flow'] and not (contains(@tracePoint, 'START')) and not (contains(@tracePoint, 'BEFORE'))]",
+    "usageAttribute" : null,
+    "usagePattern" : null,
     "projectNamePattern" : null
   } ],
   "swaggerRules" : [ {
