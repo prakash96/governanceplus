@@ -11,6 +11,19 @@ public class SwaggerRuleDto {
     /** Optional glob (e.g. "*-api") matched against the target project's pom.xml artifactId; blank/absent = all projects. */
     private String projectNamePattern;
 
+    /**
+     * The fields below are only ever read/written by the Rules UI's Selection +
+     * Assertion condition builder, to let it reconstruct that state when a rule
+     * is reopened for editing. The rule engine itself (reviewer-core's
+     * RuleLoader/SwaggerRuleEvaluator) only ever reads jsonPath — it has no
+     * idea these exist, and a rule authored by hand (or before this builder
+     * existed) simply leaves them null, which the UI treats as "jsonPath is a
+     * compound/manually-written expression, don't try to decompose it".
+     */
+    private String selection;
+    private String operator;
+    private String value;
+
     public SwaggerRuleDto() {
     }
 
@@ -39,4 +52,13 @@ public class SwaggerRuleDto {
 
     public String getProjectNamePattern() { return projectNamePattern; }
     public void setProjectNamePattern(String projectNamePattern) { this.projectNamePattern = projectNamePattern; }
+
+    public String getSelection() { return selection; }
+    public void setSelection(String selection) { this.selection = selection; }
+
+    public String getOperator() { return operator; }
+    public void setOperator(String operator) { this.operator = operator; }
+
+    public String getValue() { return value; }
+    public void setValue(String value) { this.value = value; }
 }

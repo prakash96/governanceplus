@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+        http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+
+    <!--
+      Walks the reviewed project's directory tree (Mule File Connector) and hands each file's raw
+      content off to reviewer-mule's own Java rule-evaluation classes
+      (src/main/java/com/governanceplus/reviewermule/ruleengine — XPathEvaluator,
+      PomDependencyValidator, SwaggerRuleEvaluator) via DataWeave's native Java interop
+      (`import * from java!fully::qualified::ClassName`, never the Mule Java Module). Those classes
+      are copied/trimmed from reviewer-core rather than depended on — reviewer-mule has no Maven
+      dependency on the reviewer-core artifact — after an earlier all-DataWeave reimplementation of
+      XPath/JSONPath evaluation proved unreliable (DataWeave's xpath() needed namespace
+      registration that never quite matched Mule XML's default-namespace elements, causing real
+      rules to report zero violations). XPathEvaluator/PomDependencyValidator both parse
+      NAMESPACE-UNAWARE, which is what actually fixes that: unprefixed XPath like //logger matches
+      regardless of the file's declared default namespace.
+
+      Reads rules from the H2 DB (rules-crud.xml's tables) instead of rules.json — a rule added via
+      POST /api/rules/xml is immediately visible to a review. DB access, projectNamePattern glob
+      filtering, directory walking, and report assembly stay native Mule/DataWeave; only the actual
+      rule-against-content evaluation is Java.
+
+      No usageAttribute/usagePattern "is this variable used elsewhere" convention anymore (removed
+      by request) — every XPath/JSONPath match is reported as a violation directly. XML rule
+      violations DO carry real line numbers now (XPathEvaluator builds its DOM by hand from SAX
+      events, stamping each element with its source line via the SAX Locator — see that class's
+      javadoc); pom.xml and Swagger/JSONPath violations still report line: -1, same as the
+      original reviewer-core engine (neither ever tracked line numbers, even there).
+
+      Invoked via flow-ref from reviews.xml with vars.projectDir already set to an absolute,
+      already-resolved (extracted zip or given projectPath) directory. Sets `payload` to the final
+      {summary, findings} JSON report. No error-handler here on purpose — anything unexpected
+      propagates to the caller's api-error-handler (ANY -> 500).
+    -->
+
+    <flow name="run-project-review">
+
+        <!-- 1. Load all three rule categories from the DB (same tables rules-crud.xml manages). -->
+        <db:select config-ref="rules-db-config" target="xmlRuleRows">
+            <db:sql>SELECT * FROM XML_RULES</db:sql>
+        </db:select>
+        <db:select config-ref="rules-db-config" target="pomRuleRows">
+            <db:sql>SELECT * FROM POM_RULES</db:sql>
+        </db:select>
+        <db:select config-ref="rules-db-config" target="swaggerRuleRows">
+            <db:sql>SELECT * FROM SWAGGER_RULES</db:sql>
+        </db:select>
+
+        <!-- 2. pom.xml is optional (a project might not have one at the root); absence just means
+             no project-name-based rule filtering and no POM rule checks. -->
+        <try>
+            <file:read config-ref="local-file-config" path="#[vars.projectDir ++ '/pom.xml']" target="pomFileResult" />
+            <set-variable variableName="pomContent" value='#[output application/java&#10;---&#10;write(vars.pomFileResult, "text/xml")]' />
+            <error-handler>
+                <on-error-continue type="FILE:ILLEGAL_PATH, FILE:CONNECTIVITY">
+                    <set-variable variableName="pomContent" value="#[null]" />
+                </on-error-continue>
+            </error-handler>
+        </try>
+
+        <!-- 3. Resolve the project's own artifactId (for projectNamePattern filtering) and filter
+             every rule list down to the ones applicable to this project, via
+             GlobMatcher#matches (java.nio's real glob syntax — *, ?, [...], {...} — same as
+             reviewer-core's GlobMatcher, replacing an earlier hand-rolled DataWeave
+             glob-to-regex conversion that only handled * and ?). -->
+        <ee:transform>
+            <ee:variables>
+                <ee:set-variable variableName="projectArtifactId"><![CDATA[%dw 2.0
+output application/java
+---
+if (vars.pomContent == null) null else (((read(vars.pomContent, "application/xml")).project.artifactId) as String default null)]]></ee:set-variable>
+                <ee:set-variable variableName="applicableXmlRules"><![CDATA[%dw 2.0
+output application/java
+import * from java!com::governanceplus::reviewermule::ruleengine::GlobMatcher
+fun appliesToProject(pattern) =
+    (isEmpty(pattern default "")) or (vars.projectArtifactId == null) or (matchGlob(pattern, vars.projectArtifactId))
+---
+vars.xmlRuleRows filter (appliesToProject($.PROJECT_NAME_PATTERN))]]></ee:set-variable>
+                <ee:set-variable variableName="applicablePomRules"><![CDATA[%dw 2.0
+output application/java
+import * from java!com::governanceplus::reviewermule::ruleengine::GlobMatcher
+fun appliesToProject(pattern) =
+    (isEmpty(pattern default "")) or (vars.projectArtifactId == null) or (matchGlob(pattern, vars.projectArtifactId))
+---
+vars.pomRuleRows filter (appliesToProject($.PROJECT_NAME_PATTERN))]]></ee:set-variable>
+                <ee:set-variable variableName="applicableSwaggerRules"><![CDATA[%dw 2.0
+output application/java
+import * from java!com::governanceplus::reviewermule::ruleengine::GlobMatcher
+fun appliesToProject(pattern) =
+    (isEmpty(pattern default "")) or (vars.projectArtifactId == null) or (matchGlob(pattern, vars.projectArtifactId))
+---
+vars.swaggerRuleRows filter (appliesToProject($.PROJECT_NAME_PATTERN))]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <!-- 4. Recursively list every file under src/main/mule (absence = no Mule XML flows to check). -->
+        <try>
+            <file:list config-ref="local-file-config" directoryPath="#[vars.projectDir ++ '/src/main/mule']" recursive="true" target="muleFileList" />
+            <error-handler>
+                <on-error-continue type="FILE:ILLEGAL_PATH, FILE:CONNECTIVITY">
+                    <set-variable variableName="muleFileList" value="#[[]]" />
+                </on-error-continue>
+            </error-handler>
+        </try>
+
+        <set-variable variableName="muleXmlPaths" value="#[%dw 2.0
+output application/java
+---
+((vars.muleFileList default []) filter ((not $.attributes.directory) and ((upper($.attributes.path)) endsWith '.XML'))) map $.attributes.path]" />
+
+        <!-- 5. Read every matched XML file's raw content once, then hand each to XPathEvaluator below. -->
+        <set-variable variableName="muleFileContents" value="#[[]]" />
+        <foreach collection="#[vars.muleXmlPaths]">
+            <file:read config-ref="local-file-config" path="#[payload]" target="fileReadResult" />
+            <set-variable variableName="muleFileContents" value='#[output application/java&#10;---&#10;(vars.muleFileContents default []) ++ [{ path: payload, content: write(vars.fileReadResult, "text/xml") }]]' />
+        </foreach>
+
+        <!-- 6. Evaluate every applicable XML rule against every gathered XML file — one Java call
+             per file, all applicable rules at once (see XPathEvaluator#evaluateXmlRulesAsJson). -->
+        <ee:transform>
+            <ee:variables>
+                <ee:set-variable variableName="xmlViolations"><![CDATA[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::XPathEvaluator
+output application/java
+var rulesJson = write(vars.applicableXmlRules map ((r) -> { id: r.ID, description: r.DESCRIPTION, xpath: r.XPATH }), "application/json")
+---
+(vars.muleFileContents default []) flatMap ((file) ->
+    read(evaluateXmlRulesAsJson(file.content, file.path, vars.projectDir, rulesJson), "application/json")
+)]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <!-- 7. pom.xml dependency/version checks (PomDependencyValidator#validatePomRulesAsJson). -->
+        <ee:transform>
+            <ee:variables>
+                <ee:set-variable variableName="pomViolations"><![CDATA[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::PomDependencyValidator
+output application/java
+---
+if (vars.pomContent == null) []
+else do {
+    var rulesJson = write(vars.applicablePomRules map ((r) -> { artifactId: r.ARTIFACT_ID, minVersion: r.MIN_VERSION }), "application/json")
+    ---
+    read(validatePomRulesAsJson(vars.pomContent, rulesJson), "application/json")
+}]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <!-- 8. Swagger/OpenAPI specs — absence = nothing to check. -->
+        <try>
+            <file:list config-ref="local-file-config" directoryPath="#[vars.projectDir ++ '/src/main/resources/api']" recursive="true" target="apiFileList" />
+            <error-handler>
+                <on-error-continue type="FILE:ILLEGAL_PATH, FILE:CONNECTIVITY">
+                    <set-variable variableName="apiFileList" value="#[[]]" />
+                </on-error-continue>
+            </error-handler>
+        </try>
+
+        <set-variable variableName="specPaths" value="#[%dw 2.0
+output application/java
+---
+((vars.apiFileList default []) filter ((not $.attributes.directory) and (((upper($.attributes.path)) endsWith '.YAML') or ((upper($.attributes.path)) endsWith '.YML') or ((upper($.attributes.path)) endsWith '.JSON')))) map $.attributes.path]" />
+
+        <set-variable variableName="swaggerViolations" value="#[[]]" />
+        <choice>
+            <when expression="#[not isEmpty(vars.applicableSwaggerRules) and not isEmpty(vars.specPaths)]">
+                <foreach collection="#[vars.specPaths]">
+                    <file:read config-ref="local-file-config" path="#[payload]" target="specReadResult" />
+                    <set-variable variableName="specFileName" value="#[(payload splitBy '/')[-1]]" />
+                    <!-- SwaggerRuleEvaluator#evaluateSwaggerRulesAsJson — real Jayway JsonPath, same
+                         as reviewer-core originally used (see that class's javadoc). -->
+                    <set-variable variableName="specViolations" value="#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::SwaggerRuleEvaluator
+output application/java
+var rulesJson = write(vars.applicableSwaggerRules map ((r) -> { id: r.ID, description: r.DESCRIPTION, jsonPath: r.JSON_PATH }), 'application/json')
+---
+read(evaluateSwaggerRulesAsJson(vars.specReadResult as String {encoding: 'UTF-8'}, vars.specFileName, rulesJson), 'application/json')]" />
+                    <set-variable variableName="swaggerViolations" value="#[(vars.swaggerViolations default []) ++ vars.specViolations]" />
+                </foreach>
+            </when>
+        </choice>
+
+        <!-- 9. Combine every violation category into the ReviewReport/ReviewFinding JSON shape the
+             frontend already expects. -->
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var allViolations = (vars.xmlViolations default []) ++ (vars.pomViolations default []) ++ (vars.swaggerViolations default [])
+var ruleMeta = (vars.xmlRuleRows map (r) -> { id: r.ID as String, description: r.DESCRIPTION, category: r.CATEGORY, severity: r.SEVERITY })
+    ++ (vars.swaggerRuleRows map (r) -> { id: r.ID as String, description: r.DESCRIPTION, category: r.CATEGORY, severity: r.SEVERITY })
+fun lookupMeta(ruleId) = (ruleMeta filter ($.id == (ruleId as String)))[0] default null
+fun mapSeverity(raw) =
+    if (raw == null) "MAJOR"
+    else do {
+        var upperRaw = upper(raw as String)
+        ---
+        if (contains(upperRaw, "CRIT")) "CRITICAL"
+        else if (contains(upperRaw, "ERROR") or contains(upperRaw, "MAJOR")) "MAJOR"
+        else "MINOR"
+    }
+fun toFinding(v) = do {
+    var meta = lookupMeta(v.ruleId)
+    ---
+    if (meta != null)
+        {
+            rule: meta.description,
+            category: meta.category,
+            status: "FAIL",
+            severity: mapSeverity(meta.severity),
+            file: if (v.line >= 0) ((v.file as String) ++ ":" ++ (v.line as String)) else v.file,
+            explanation: v.message,
+            recommendation: ""
+        }
+    else
+        {
+            rule: "Dependency version requirement: " ++ (v.ruleId as String),
+            category: "Dependencies",
+            status: "FAIL",
+            severity: "MAJOR",
+            file: v.file,
+            explanation: v.message,
+            recommendation: ""
+        }
+}
+var findings = allViolations map ((v) -> toFinding(v))
+---
+{
+    summary: "Rule-engine review: " ++ (sizeOf(findings) as String) ++ " violation(s) found across Mule XML flows, pom.xml, and Swagger/OpenAPI specs.",
+    findings: findings
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+</mule>

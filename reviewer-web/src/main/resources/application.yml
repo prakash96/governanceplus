@@ -8,27 +8,9 @@ spring:
       max-request-size: 50MB
 
 governanceplus:
-  model:
-    # Defaults to a canned mock engine so the server starts and the full
-    # HTTP/UI pipeline can be exercised without a real GGUF model file.
-    # Set to false and provide `path` to use a real model for rule-authoring
-    # assist (see RuleAssistController) — reviews never load it.
-    mock: false
-    path: "../models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-    context-size: 4096
-    # 0 = auto-detect (Runtime.availableProcessors()). Previously hardcoded to
-    # 4 regardless of the machine's actual core count — set explicitly to
-    # leave CPU headroom for other work on the same box if needed.
-    threads: 0
-    # Cap on generated tokens per assist response. This runs CPU-only (see
-    # ModelService's forced setGpuLayers(0)) — measured at ~3-4 tokens/sec with
-    # Llama-3.2-3B-Instruct Q4_K_M on modest hardware, so the old default of
-    # 1024 tokens meant waiting several minutes per response. Assist replies
-    # are meant to be a short rule expression/description or a short
-    # plain-English explanation, not an essay, so this is capped low enough to
-    # keep typical responses under a minute. Raise it if your hardware is
-    # faster and you'd rather have longer answers.
-    max-output-tokens: 150
+  # AI-assist config (governanceplus.model.*) has moved to the reviewer-ai
+  # module, which isn't a reviewer-web dependency for now — see reviewer-ai's
+  # pom.xml. Nothing here reads governanceplus.model.* until that changes.
   rules:
     # Resolved relative to the working directory the jar/process is started
     # from. Default assumes `reviewer-web/` as the working directory (e.g.

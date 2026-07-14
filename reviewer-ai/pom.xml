@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.governanceplus</groupId>
+        <artifactId>governanceplus-parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>reviewer-ai</artifactId>
+    <packaging>jar</packaging>
+    <name>reviewer-ai</name>
+
+    <!--
+      AI-assist for AUTHORING rules (suggest/explain) — never used by the
+      deterministic review pipeline (reviewer-core), which has no dependency
+      on this module and never will. Split out from reviewer-core/reviewer-web
+      so the review pipeline and web app can build and run without pulling in
+      the multi-GB-model / native-JNI (llama.cpp) footprint this needs.
+
+      NOT currently a dependency of reviewer-web (see root pom.xml's module
+      list and reviewer-web/pom.xml) — this module builds standalone in the
+      reactor but isn't wired into the web app for now. Re-integrating it
+      later requires reviewer-web to depend on this artifact AND either add
+      com.governanceplus.ai to its component-scan (GovernancePlusApplication
+      currently scans only com.governanceplus.web by default) or ship this as
+      a Spring Boot autoconfiguration jar.
+    -->
+    <properties>
+        <spring-boot.version>2.7.18</spring-boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!--
+          JNI-bound llama.cpp for Java. Loads a native shared library inside the JVM
+          process (no separate executable, no subprocess, no port). Bundles native
+          libs for common platforms inside the jar.
+
+          IMPORTANT: verify the latest groupId/artifactId/version on Maven Central
+          before building — this library moves fast and APIs/coordinates can shift
+          between releases. As of writing it is published as:
+              groupId:    de.kherud
+              artifactId: java-llama.cpp
+          Check https://central.sonatype.com/artifact/de.kherud/java-llama.cpp
+          for the current version and confirm the API calls used in ModelService.java
+          still match (method names/signatures have changed across versions).
+        -->
+        <dependency>
+            <groupId>de.kherud</groupId>
+            <artifactId>llama</artifactId>
+            <version>4.2.0</version>
+        </dependency>
+
+        <!-- @Configuration/@Bean/@RestController/@Value/ResponseStatusException, and Jackson for the DTOs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+</project>

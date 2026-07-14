@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.governanceplus</groupId>
+		<artifactId>governanceplus-parent</artifactId>
+		<version>1.0.0</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+
+	<artifactId>reviewer-mule</artifactId>
+	<packaging>mule-application</packaging>
+	<name>reviewer-mule</name>
+	<properties>
+		<mule.maven.plugin.version>4.3.0</mule.maven.plugin.version>
+		<app.runtime>4.4.0</app.runtime>
+	</properties>
+
+	<repositories>
+		<repository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/nexus/content/repositories/releases/</url>
+			<layout>default</layout>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>anypoint-exchange-v3</id>
+			<name>Anypoint Exchange V3</name>
+			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
+			<layout>default</layout>
+		</repository>
+	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/nexus/content/repositories/releases/</url>
+			<layout>default</layout>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</pluginRepository>
+	</pluginRepositories>
+
+	<dependencies>
+		<!-- Rules storage (db:select/insert/update/delete in rules-crud.xml). -->
+		<dependency>
+			<groupId>org.mule.connectors</groupId>
+			<artifactId>mule-db-connector</artifactId>
+			<version>1.13.5</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<!-- In-memory JDBC database for now — see this file's top comment and 
+			global.xml's db:generic-connection for what changes when this becomes a real 
+			Oracle database. -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<version>2.2.224</version>
+		</dependency>
+		<!-- Routes every endpoint by src/main/resources/api/reviewer-mule-api.raml 
+			via apikit:router in global.xml — replaces the individual http:listener each 
+			flow used to have with one shared listener + router dispatching per api-router-bindings.xml. -->
+		<dependency>
+			<groupId>org.mule.modules</groupId>
+			<artifactId>mule-apikit-module</artifactId>
+			<version>1.11.3</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.mule.connectors</groupId>
+			<artifactId>mule-http-connector</artifactId>
+			<version>1.10.5</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<!-- Walks the reviewed project's directory tree (review-engine.xml's file:list/file:read) 
+			— this is what replaced RuleEngine's java.nio.file.Files.walk calls when 
+			review orchestration moved from Java (RuleEngineReviewAdapter) to native 
+			Mule. -->
+		<dependency>
+			<groupId>org.mule.connectors</groupId>
+			<artifactId>mule-file-connector</artifactId>
+			<version>1.5.1</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<!-- Back reviewer-mule's own Java rule-evaluation classes (src/main/java/.../ruleengine) —
+		     copied from reviewer-core rather than depended-on (see this file's top comment). Plain
+		     library jars, not Mule connectors, so no mule-plugin classifier. -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.16.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.dataformat</groupId>
+			<artifactId>jackson-dataformat-yaml</artifactId>
+			<version>2.16.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.jayway.jsonpath</groupId>
+			<artifactId>json-path</artifactId>
+			<version>2.9.0</version>
+		</dependency>
+		<!-- Backs com.governanceplus.reviewermule.io.GitFetcher (reviews.xml's submit-review,
+		     git-clone branch) — pure-Java Git client, no native `git` executable needed on the Mule
+		     server. Same version reviewer-core's own GitFetcher uses. -->
+		<dependency>
+			<groupId>org.eclipse.jgit</groupId>
+			<artifactId>org.eclipse.jgit</artifactId>
+			<version>6.8.0.202311291450-r</version>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<finalName>reviewer-mule</finalName>
+		<plugins>
+			<plugin>
+				<groupId>org.mule.tools.maven</groupId>
+				<artifactId>mule-maven-plugin</artifactId>
+				<version>${mule.maven.plugin.version}</version>
+				<extensions>true</extensions>
+				<configuration>
+					<classifier>mule-application</classifier>
+					
+					<additionalPluginDependencies>
+						<plugin>
+							<groupId>org.mule.connectors</groupId>
+							<artifactId>mule-db-connector</artifactId>
+							<additionalDependencies>
+								<dependency>
+									<groupId>com.h2database</groupId>
+									<artifactId>h2</artifactId>
+									<version>2.2.224</version>
+								</dependency>
+							</additionalDependencies>
+						</plugin>
+					</additionalPluginDependencies>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

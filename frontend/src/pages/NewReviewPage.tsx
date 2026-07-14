@@ -1,47 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { fetchJob, JobNotFoundError, submitReview } from '../api/client';
-import type { ProjectSource } from '../api/client';
-import { getRecentJobs, pushRecentJob, removeRecentJob } from '../recentJobs';
+import { Link } from 'react-router-dom';
+import { submitReview } from '../api/client';
+import type { ProjectSource, ReviewReport } from '../api/client';
+import EngineReportSection from '../components/EngineReportSection';
 
-type SourceMode = 'zip' | 'path';
+type SourceMode = 'zip' | 'git';
 
 export default function NewReviewPage() {
   const [sourceMode, setSourceMode] = useState<SourceMode>('zip');
   const [file, setFile] = useState<File | null>(null);
-  const [projectPath, setProjectPath] = useState('');
+  const [gitUrl, setGitUrl] = useState('');
+  const [gitBranch, setGitBranch] = useState('');
+  const [gitUsername, setGitUsername] = useState('');
+  const [gitToken, setGitToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recentJobs, setRecentJobs] = useState<string[]>(() => getRecentJobs());
-  const navigate = useNavigate();
-
-  // Job records live in-memory on the server and are purged after a TTL (or
-  // lost on restart), but the recent-jobs list is client-side localStorage —
-  // so it can drift out of sync. Drop entries the server no longer knows
-  // about rather than leaving dead links in the list.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function pruneStaleJobs() {
-      for (const jobId of getRecentJobs()) {
-        try {
-          await fetchJob(jobId);
-        } catch (e) {
-          if (e instanceof JobNotFoundError) {
-            removeRecentJob(jobId);
-          }
-        }
-      }
-      if (!cancelled) setRecentJobs(getRecentJobs());
-    }
-
-    pruneStaleJobs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [report, setReport] = useState<ReviewReport | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -54,103 +29,141 @@ export default function NewReviewPage() {
       }
       source = { kind: 'zip', file };
     } else {
-      if (!projectPath.trim()) {
-        setError('Enter a project path first.');
+      if (!gitUrl.trim() || !gitBranch.trim()) {
+        setError('Enter both a Git URL and a branch first.');
         return;
       }
-      source = { kind: 'path', projectPath: projectPath.trim() };
+      source = {
+        kind: 'git',
+        gitUrl: gitUrl.trim(),
+        gitBranch: gitBranch.trim(),
+        gitUsername: gitUsername.trim() || undefined,
+        gitToken: gitToken.trim() || undefined,
+      };
     }
 
     setSubmitting(true);
     setError(null);
+    setReport(null);
     try {
-      const job = await submitReview(source);
-      pushRecentJob(job.jobId);
-      navigate(`/reviews/${job.jobId}`);
+      const result = await submitReview(source);
+      setReport(result);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="page page-narrow">
-      <h1>Mulesoft Governance Review</h1>
-      <p className="subtitle">
-        Upload a Mulesoft project (or point at one already on the server) as a zip file. XML
-        flows, pom.xml, and Swagger/OpenAPI specs are checked by a deterministic rule engine
-        against the rules currently saved in <Link to="/rules">Rules</Link> — edit rules there
-        before running if needed.
-      </p>
+    <div className="page">
+      <div className="page-narrow">
+        <h1>Mulesoft Governance Review</h1>
+        <p className="subtitle">
+          Upload a Mulesoft project as a zip file, or point at a Git repository to clone. XML
+          flows, pom.xml, and Swagger/OpenAPI specs are checked by a deterministic rule engine
+          against the rules currently saved in <Link to="/rules">Rules</Link> — edit rules there
+          before running if needed.
+        </p>
 
-      <div className="card">
-        <form onSubmit={handleSubmit} className="review-form">
-          <div className="field">
-            <span>Project source</span>
-            <div className="filter-chips">
-              <button
-                type="button"
-                className={`chip ${sourceMode === 'zip' ? 'chip-active' : ''}`}
-                onClick={() => setSourceMode('zip')}
-              >
-                Upload zip
-              </button>
-              <button
-                type="button"
-                className={`chip ${sourceMode === 'path' ? 'chip-active' : ''}`}
-                onClick={() => setSourceMode('path')}
-              >
-                Filesystem path
-              </button>
+        <div className="card">
+          <form onSubmit={handleSubmit} className="review-form">
+            <div className="field">
+              <span>Project source</span>
+              <div className="filter-chips">
+                <button
+                  type="button"
+                  className={`chip ${sourceMode === 'zip' ? 'chip-active' : ''}`}
+                  onClick={() => setSourceMode('zip')}
+                >
+                  Upload zip
+                </button>
+                <button
+                  type="button"
+                  className={`chip ${sourceMode === 'git' ? 'chip-active' : ''}`}
+                  onClick={() => setSourceMode('git')}
+                >
+                  Git repository
+                </button>
+              </div>
             </div>
-          </div>
 
-          {sourceMode === 'zip' ? (
-            <label className="field">
-              <span>Project zip</span>
-              <input
-                type="file"
-                accept=".zip"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          ) : (
-            <label className="field">
-              <span>Project path</span>
-              <input
-                type="text"
-                placeholder="e.g. C:\projects\my-mule-app or /home/me/my-mule-app"
-                value={projectPath}
-                onChange={(e) => setProjectPath(e.target.value)}
-              />
-              <p className="subtitle">
-                A path on the machine running the backend, not your own machine (unless they're
-                the same). Read directly, with no access restriction beyond the backend
-                process's own filesystem permissions — only use this where you already trust
-                whoever can reach this page with local file access.
-              </p>
-            </label>
-          )}
+            {sourceMode === 'zip' ? (
+              <label className="field">
+                <span>Project zip</span>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            ) : (
+              <>
+                <label className="field">
+                  <span>Git URL</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. https://github.com/org/repo.git"
+                    value={gitUrl}
+                    onChange={(e) => setGitUrl(e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Branch</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. main"
+                    value={gitBranch}
+                    onChange={(e) => setGitBranch(e.target.value)}
+                  />
+                  <p className="subtitle">
+                    Cloned shallowly (just this branch's latest commit) over HTTPS on the server.
+                  </p>
+                </label>
+                <details>
+                  <summary>Private repository?</summary>
+                  <label className="field">
+                    <span>Username</span>
+                    <input
+                      type="text"
+                      placeholder="any non-empty value usually works alongside a token"
+                      value={gitUsername}
+                      onChange={(e) => setGitUsername(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Personal access token</span>
+                    <input
+                      type="password"
+                      value={gitToken}
+                      onChange={(e) => setGitToken(e.target.value)}
+                      autoComplete="off"
+                    />
+                    <p className="subtitle">
+                      Sent once with this request, not stored. Leave both fields blank to use the
+                      server's own GIT_USERNAME/GIT_TOKEN configuration instead, if set.
+                    </p>
+                  </label>
+                </details>
+              </>
+            )}
 
-          {error && <p className="error">{error}</p>}
+            {error && <p className="error">{error}</p>}
 
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Run review'}
-          </button>
-        </form>
+            <button type="submit" disabled={submitting}>
+              {submitting ? 'Running…' : 'Run review'}
+            </button>
+          </form>
+        </div>
       </div>
 
-      {recentJobs.length > 0 && (
-        <div className="card recent-jobs">
-          <h2>Recent reviews (this browser)</h2>
-          <ul>
-            {recentJobs.map((jobId) => (
-              <li key={jobId}>
-                <Link to={`/reviews/${jobId}`}>{jobId}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {report && (
+        <EngineReportSection
+          title="Governance Review"
+          subtitle="Rule engine — deterministic XPath/pom/JSONPath rules against Mule flow XML, pom.xml dependency versions, and Swagger/OpenAPI specs."
+          report={report}
+        />
       )}
     </div>
   );

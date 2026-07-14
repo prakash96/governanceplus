@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
+
+    <!--
+      RAML-based apikit:router dispatch has no OAS-style operationId — the convention it falls
+      back to is flow name = "<verb>:\<path-with-backslashes>:[<request-body-mediatype>:]<apikit
+      config name>", where {pathParam} becomes (pathParam), and the mediatype segment (itself
+      backslash-separated, e.g. application\json) is present ONLY when that operation declares a
+      request body — one flow PER declared body mediatype (submit-review declares both
+      application/json and multipart/form-data, so it needs two). This was NOT a guess: Anypoint
+      Studio auto-scaffolded a companion file from this exact RAML against this exact
+      mule-apikit-module version, confirming (parentheses, not braces; the mediatype segment;
+      backslash throughout) and disagreeing with an earlier guess of mine that used
+      forward-slash-free braces and omitted the mediatype segment entirely — that auto-scaffolded
+      file was deleted (it also duplicated global.xml's apikit:config/reviewer-mule-api-main flow
+      names, which would fail to deploy) once this file absorbed the corrected convention it
+      revealed. Config name below MUST match global.xml's apikit:config name= exactly.
+
+      Each entry is a one-line flow-ref into the real, cleanly-named implementation flow — if this
+      convention ever needs adjusting again, it's a rename here, never a change to business logic
+      in reviews.xml/rules-crud.xml/rules-test.xml.
+    -->
+
+    <flow name="api-router-bindings-flow" doc:id="e0374280-f99c-4cae-a6bb-e05bff3e251b" >
+		<http:listener doc:name="Listener" doc:id="4c3b08c9-02d8-4d2a-a361-b282274594d9" config-ref="reviewer-mule-httpListenerConfig" path="/api/*"/>
+		<apikit:router doc:name="APIkit Router" doc:id="174bccb0-5bae-486f-98f4-6d4ea22574f7" config-ref="reviewer-mule-apikit-config"/>
+		<error-handler ref="api-error-handler"/>
+	</flow>
+	<flow name="api-router-bindingsFlow" doc:id="d0100096-f0f4-41e9-bdac-9e68b5a90621" >
+		<http:listener doc:name="Listener" doc:id="266fd6c1-db73-4dfe-b44b-57a1005961d8" config-ref="reviewer-mule-httpListenerConfig" path="/*"/>
+		<http:load-static-resource doc:name="Load static resource" doc:id="a058cd69-3e0d-47b8-b101-c7a6a0ca1ee9" resourceBasePath="C:\governanceplus\governanceplus\frontend\dist"/>
+	</flow>
+	<flow name="post:\auth\login:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="login" />
+    </flow>
+
+    <flow name="post:\reviews:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="submit-review" doc:name="submit-review"/>
+    </flow>
+    <flow name="post:\reviews:multipart\form-data:reviewer-mule-apikit-config">
+        <flow-ref name="submit-review" doc:name="submit-review"/>
+    </flow>
+
+    <flow name="get:\rules:reviewer-mule-apikit-config">
+        <flow-ref name="get-rules" />
+    </flow>
+
+    <flow name="post:\rules\xml:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="add-xml-rule" />
+    </flow>
+    <flow name="put:\rules\xml\(id):application\json:reviewer-mule-apikit-config">
+        <flow-ref name="update-xml-rule" />
+    </flow>
+    <flow name="delete:\rules\xml\(id):reviewer-mule-apikit-config">
+        <flow-ref name="delete-xml-rule" />
+    </flow>
+
+    <flow name="post:\rules\pom:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="add-pom-rule" />
+    </flow>
+    <flow name="put:\rules\pom\(artifactId):application\json:reviewer-mule-apikit-config">
+        <flow-ref name="update-pom-rule" />
+    </flow>
+    <flow name="delete:\rules\pom\(artifactId):reviewer-mule-apikit-config">
+        <flow-ref name="delete-pom-rule" />
+    </flow>
+
+    <flow name="post:\rules\swagger:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="add-swagger-rule" />
+    </flow>
+    <flow name="put:\rules\swagger\(id):application\json:reviewer-mule-apikit-config">
+        <flow-ref name="update-swagger-rule" />
+    </flow>
+    <flow name="delete:\rules\swagger\(id):reviewer-mule-apikit-config">
+        <flow-ref name="delete-swagger-rule" />
+    </flow>
+
+    <flow name="post:\rules\xml\test:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="test-xml-rule" />
+    </flow>
+    <flow name="post:\rules\pom\test:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="test-pom-rule" />
+    </flow>
+    <flow name="post:\rules\swagger\test:application\json:reviewer-mule-apikit-config">
+        <flow-ref name="test-swagger-rule" />
+    </flow>
+</mule>

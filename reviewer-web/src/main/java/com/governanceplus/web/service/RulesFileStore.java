@@ -1,5 +1,6 @@
 package com.governanceplus.web.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.governanceplus.web.dto.rules.PomRuleDto;
@@ -33,7 +34,12 @@ import java.util.List;
 @Component
 public class RulesFileStore {
 
-    private final ObjectMapper objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    // Tolerates fields rules.json has that the current DTOs don't declare (e.g. a stale field left
+    // over from a prior schema, or a rules.json edited/produced by a different version of this app)
+    // rather than failing to load the whole file over one unrecognized key.
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Value("${governanceplus.rules.path:../rules/rules.json}")
     private String rulesPath;

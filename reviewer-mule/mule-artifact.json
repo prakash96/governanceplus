@@ -1,0 +1,8 @@
+{
+    "name": "reviewer-mule",
+    "classLoaderModelLoaderDescriptor": {"id": "mule"},
+    "requiredProduct": "MULE",
+    "minMuleVersion": "4.4.0",
+    "bundleDescriptorLoader": {"id": "mule"},
+    "javaSpecificationVersions": ["11"]
+}

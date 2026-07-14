@@ -1,0 +1,542 @@
+{
+  "info": {
+    "name": "GovernancePlus Reviewer API",
+    "description": "Covers reviewer-web and reviewer-mule -- both expose the same REST surface by design (reviewer-mule mirrors reviewer-web's endpoints; see reviewer-mule/pom.xml's top comment for the documented deltas). Set the `baseUrl` variable to whichever backend you're running: reviewer-web defaults to port 8081 (reviewer-web/src/main/resources/application.yml), reviewer-mule also currently defaults to port 8081 (reviewer-mule/src/main/mule/global.xml's http.port property).\n\nKnown differences when pointed at reviewer-mule instead of reviewer-web:\n- GET /api/reviews/{jobId} doesn't exist on reviewer-mule (no job history/polling -- POST /api/reviews runs synchronously and returns the report directly there).\n- Rules CRUD on reviewer-mule is backed by an in-memory H2 database seeded from schema.sql, not the shared rules/rules.json file reviewer-web reads/writes -- the two backends do NOT share rule state.\n- Review runs on reviewer-mule currently read rules from rules/rules.json regardless (a known, flagged gap -- see reviewer-mule/src/main/mule/global.xml's comment on the rules.dir property), so a rule added via reviewer-mule's own POST /api/rules/xml is not yet visible to reviewer-mule's own POST /api/reviews.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "xmlRuleId",
+      "value": "MULE039",
+      "type": "string"
+    },
+    {
+      "key": "pomRuleArtifactId",
+      "value": "mule-amqp-connector",
+      "type": "string"
+    },
+    {
+      "key": "swaggerRuleId",
+      "value": "SWAGGER-001",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "REPLACE_WITH_A_JOB_ID_FROM_SUBMIT_REVIEW_RESPONSE",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Submit Review (server-side project path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews"
+              ]
+            },
+            "description": "Runs the deterministic rule engine against a project already on the server's filesystem. reviewer-web: async, returns {jobId, status, report: null, errorMessage: null} immediately -- poll GET /api/reviews/{jobId} for the result. reviewer-mule: synchronous, returns the full report directly.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectPath\": \"/absolute/path/to/a/mule/project/on/the/server\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Review (zip upload)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews"
+              ]
+            },
+            "description": "Upload a project zip instead of a server-side path. reviewer-web extracts to a temp dir; reviewer-mule extracts under /opt/mule/tmp (both zip-slip / zip-bomb guarded). Select a .zip file for the `file` form field before sending -- Postman can't pre-fill a file path for you.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review Job (reviewer-web only)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reviews/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reviews",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Poll a submitted review job's status/report. Set the `jobId` variable from a Submit Review response first. reviewer-web only -- this endpoint does not exist on reviewer-mule (no job history there; see collection description)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rules",
+      "item": [
+        {
+          "name": "List All Rules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules"
+              ]
+            },
+            "description": "Returns { rules: [...XML], pomRules: [...], swaggerRules: [...] }."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rules / XML",
+      "item": [
+        {
+          "name": "Add XML Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "xml"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"MULE039\",\n  \"category\": \"LOGGING\",\n  \"severity\": \"WARN\",\n  \"description\": \"Logger should define log message\",\n  \"xpath\": \"//logger[not(@message)]\",\n  \"usageAttribute\": null,\n  \"usagePattern\": null,\n  \"projectNamePattern\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update XML Rule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/xml/{{xmlRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "xml",
+                "{{xmlRuleId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"MULE039\",\n  \"category\": \"LOGGING\",\n  \"severity\": \"WARN\",\n  \"description\": \"Logger should define log message\",\n  \"xpath\": \"//logger[not(@message)]\",\n  \"usageAttribute\": null,\n  \"usagePattern\": null,\n  \"projectNamePattern\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete XML Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/xml/{{xmlRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "xml",
+                "{{xmlRuleId}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rules / Pom",
+      "item": [
+        {
+          "name": "Add Pom Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/pom",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "pom"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"artifactId\": \"mule-amqp-connector\",\n  \"minVersion\": \"1.9.0\",\n  \"projectNamePattern\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Pom Rule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/pom/{{pomRuleArtifactId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "pom",
+                "{{pomRuleArtifactId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"artifactId\": \"mule-amqp-connector\",\n  \"minVersion\": \"1.9.0\",\n  \"projectNamePattern\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Pom Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/pom/{{pomRuleArtifactId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "pom",
+                "{{pomRuleArtifactId}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rules / Swagger",
+      "item": [
+        {
+          "name": "Add Swagger Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/swagger",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "swagger"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"SWAGGER-001\",\n  \"category\": \"API_DESIGN\",\n  \"severity\": \"WARNING\",\n  \"description\": \"Every operation should document at least one 400 error response\",\n  \"jsonPath\": \"$.paths.*.*.responses['400']\",\n  \"projectNamePattern\": \"\",\n  \"selection\": null,\n  \"operator\": null,\n  \"value\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Swagger Rule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/swagger/{{swaggerRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "swagger",
+                "{{swaggerRuleId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"SWAGGER-001\",\n  \"category\": \"API_DESIGN\",\n  \"severity\": \"WARNING\",\n  \"description\": \"Every operation should document at least one 400 error response\",\n  \"jsonPath\": \"$.paths.*.*.responses['400']\",\n  \"projectNamePattern\": \"\",\n  \"selection\": null,\n  \"operator\": null,\n  \"value\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Swagger Rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/swagger/{{swaggerRuleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "swagger",
+                "{{swaggerRuleId}}"
+              ]
+            },
+            "description": ""
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rule Testing (not persisted)",
+      "item": [
+        {
+          "name": "Test XML Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/xml/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "xml",
+                "test"
+              ]
+            },
+            "description": "Runs one ad-hoc XPath rule against pasted sample XML. Returns { matched, violations }.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"xpath\": \"//logger[not(@message)]\",\n  \"usageAttribute\": null,\n  \"usagePattern\": null,\n  \"sampleXml\": \"<mule xmlns=\\\"http://www.mulesoft.org/schema/mule/core\\\">\\n  <flow name=\\\"example-flow\\\">\\n    <logger/>\\n  </flow>\\n</mule>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Pom Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/pom/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "pom",
+                "test"
+              ]
+            },
+            "description": "Runs one ad-hoc minimum-version rule against a pasted sample pom.xml. Returns { matched, violations }.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"artifactId\": \"mule-http-connector\",\n  \"minVersion\": \"1.3.0\",\n  \"samplePom\": \"<project><dependencies><dependency><groupId>org.mule.connectors</groupId><artifactId>mule-http-connector</artifactId><version>1.0.0</version></dependency></dependencies></project>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Swagger Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/rules/swagger/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rules",
+                "swagger",
+                "test"
+              ]
+            },
+            "description": "Runs one ad-hoc JSONPath rule against a pasted sample OpenAPI spec (YAML or JSON). Returns { matched, violations }.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonPath\": \"$.paths.*.*.responses['200']\",\n  \"sampleSpec\": \"openapi: 3.0.0\\ninfo:\\n  title: Example\\n  version: 1.0.0\\npaths:\\n  /orders:\\n    get:\\n      responses:\\n        '200':\\n          description: OK\\n\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

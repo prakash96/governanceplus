@@ -1,5 +1,7 @@
 package com.governanceplus.reviewer.ruleengine;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,14 +17,30 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.governanceplus.reviewer.ruleengine.model.ComparableVersion;
 import com.governanceplus.reviewer.ruleengine.model.PomRule;
 import com.governanceplus.reviewer.ruleengine.model.Violation;
 
 public class PomDependencyValidator {
 
-
- 
+    /**
+     * DataWeave-callable convenience wrapper (`import * from java!...PomDependencyValidator` in a
+     * Mule flow) — see {@link com.governanceplus.reviewer.ruleengine.XPathEvaluator#evaluateXmlSample}
+     * for why this takes/returns plain strings instead of File/PomRule/List&lt;Violation&gt;.
+     */
+    public static String validateSample(String artifactId, String minVersion, String samplePom) throws Exception {
+        Path tempFile = Files.createTempFile("rule-test-", ".xml");
+        try {
+            Files.writeString(tempFile, samplePom);
+            File file = tempFile.toFile();
+            PomRule rule = new PomRule(artifactId, minVersion);
+            List<Violation> violations = validate(file, List.of(rule));
+            return new ObjectMapper().writeValueAsString(violations);
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
 
     // ✅ Load XML
     private static Document loadXml(File file) throws Exception {

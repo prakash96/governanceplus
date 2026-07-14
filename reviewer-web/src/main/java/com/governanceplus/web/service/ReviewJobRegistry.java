@@ -31,8 +31,9 @@ import java.util.concurrent.Executors;
  * engine (XPath/pom/JSONPath checks) against the server's single, managed
  * rules.json (see RulesFileStore/RulesController for how that file is
  * viewed/edited) — there's no per-run rules override; edit rules.json via the
- * Rules UI before running a review. There's no AI review here — see
- * RuleAssistController for the separate rule-authoring assistant.
+ * Rules UI before running a review. There's no AI review here — rule-authoring
+ * assist lives in the separate reviewer-ai module, not currently wired into
+ * this app.
  *
  * No database: job records (not the caller's own project files) are purged
  * after governanceplus.jobs.ttl-minutes.

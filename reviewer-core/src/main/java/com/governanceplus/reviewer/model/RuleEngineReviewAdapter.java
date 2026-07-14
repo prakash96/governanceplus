@@ -1,5 +1,6 @@
 package com.governanceplus.reviewer.model;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.governanceplus.reviewer.ruleengine.MuleRuleValidatorMojo;
 import com.governanceplus.reviewer.ruleengine.RuleLoader;
 import com.governanceplus.reviewer.ruleengine.model.Rule;
@@ -8,6 +9,7 @@ import com.governanceplus.reviewer.ruleengine.model.SwaggerRule;
 import com.governanceplus.reviewer.ruleengine.model.Violation;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +28,42 @@ import java.util.stream.Collectors;
  * rule lookup.
  */
 public class RuleEngineReviewAdapter {
+
+    /**
+     * DataWeave-callable convenience wrapper (`import * from java!...RuleEngineReviewAdapter` in a
+     * Mule flow) — see {@link com.governanceplus.reviewer.ruleengine.XPathEvaluator#evaluateXmlSample}
+     * for why this takes/returns plain strings instead of File/ReviewReport objects.
+     */
+    public static String reviewAsJson(String projectDirPath, String rulesJsonPath) throws Exception {
+        ReviewReport report = new RuleEngineReviewAdapter().review(new File(projectDirPath), rulesJsonPath);
+        return new ObjectMapper().writeValueAsString(report);
+    }
+
+    /**
+     * DataWeave-callable boundary check: File#isDirectory() is an instance method, so DataWeave's
+     * Java interop (static methods only) can't call it directly on an arbitrary path string.
+     */
+    public static boolean isDirectory(String path) {
+        return new File(path).isDirectory();
+    }
+
+    /**
+     * DataWeave-callable convenience wrapper for zip-upload project submission (reviews.xml's
+     * submit-review flow): extracts zipBytes into a fresh temp directory under
+     * extractionBaseDir (e.g. /opt/mule/tmp), reviews it, deletes the temp directory
+     * afterward, and returns the report as JSON. DataWeave's Binary type maps to byte[] for
+     * this parameter automatically via its Java interop.
+     */
+    public static String reviewZipAsJson(byte[] zipBytes, String rulesJsonPath, String extractionBaseDir) throws Exception {
+        ProjectZipExtractor extractor = new ProjectZipExtractor(extractionBaseDir);
+        Path extractedDir = extractor.extract(zipBytes);
+        try {
+            ReviewReport report = new RuleEngineReviewAdapter().review(extractedDir.toFile(), rulesJsonPath);
+            return new ObjectMapper().writeValueAsString(report);
+        } finally {
+            ProjectZipExtractor.cleanup(extractedDir);
+        }
+    }
 
     public ReviewReport review(File projectDir, String rulesJsonPath) throws Exception {
         File resolvedProjectDir = resolveProjectRoot(projectDir);

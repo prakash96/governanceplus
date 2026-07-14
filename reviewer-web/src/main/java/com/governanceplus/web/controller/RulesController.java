@@ -19,8 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * CRUD over the server's single, authoritative rules.json (XML/pom/Swagger
  * rule categories) — backs the Rules management UI's list/add/edit/delete.
- * See RuleTestController for "test this rule against sample input" and
- * RuleAssistController for the AI-assist endpoints.
+ * See RuleTestController for "test this rule against sample input". The
+ * AI-assist endpoints (rule-authoring help) live in the separate reviewer-ai
+ * module, not currently wired into this app.
  */
 @RestController
 @RequestMapping("/api/rules")

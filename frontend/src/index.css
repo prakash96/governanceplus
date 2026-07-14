@@ -341,8 +341,27 @@ button:disabled {
   border-color: var(--error);
 }
 
+.btn-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.btn-link:hover:not(:disabled) {
+  color: var(--accent-dark);
+}
+
 .error {
   color: var(--error);
+  font-weight: 500;
+}
+
+.warning-text {
+  color: var(--warning);
   font-weight: 500;
 }
 
@@ -544,6 +563,8 @@ button:disabled {
   font-family: inherit;
   font-size: 13px;
   margin: 0 0 8px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .explain-cell {
@@ -554,6 +575,43 @@ button:disabled {
   font-size: 13px;
   color: var(--text-muted);
   margin: 6px 0 0;
+  overflow-wrap: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* --- Swagger rule condition builder --- */
+
+.swagger-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.condition-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.condition-row .field {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.selected-field {
+  display: block;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow-wrap: break-word;
 }
 
 /* --- Report dashboard --- */
@@ -697,6 +755,18 @@ button:disabled {
 .badge-severity-minor {
   background: var(--border-strong);
   color: var(--text);
+}
+
+.badge-admin {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.admin-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
 }
 
 .filter-chips {

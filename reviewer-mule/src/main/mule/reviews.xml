@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+    <!--
+      Mirrors reviewer-web's ReviewController, with one deliberate simplification:
+        - No review history/job tracking at all: this runs the review SYNCHRONOUSLY and returns
+          the report directly in the response. reviewer-web's async submit-then-poll (jobId,
+          QUEUED/RUNNING/COMPLETED/FAILED, an Object Store of past runs) doesn't exist here — there's
+          nothing to look up later, so there's no GET /api/reviews/{jobId} in this module. The
+          caller's HTTP request just waits for the review to finish.
+
+      Accepts EXACTLY ONE of THREE project sources:
+        - `file` (zip upload, multipart part) — extracted under ${zip.extraction.dir}
+          (/opt/mule/tmp by default — see global.xml) via
+          com.governanceplus.reviewermule.ProjectZipExtractor.
+        - `projectPath` (a path already on the server's filesystem) — read directly, no extraction.
+        - `gitUrl` + `gitBranch` (a Git repo to shallow-clone), plus optional `gitUsername` +
+          `gitToken` for private repos, via com.governanceplus.reviewermule.io.GitFetcher
+          (pure-Java JGit client, no native `git` executable needed on the server). Falls back to
+          GIT_USERNAME/GIT_TOKEN server env vars when gitUsername/gitToken aren't supplied.
+          Credentials are never echoed back — clone-failure error messages only ever include the
+          URL and branch.
+      Both ProjectZipExtractor and GitFetcher are small classes living IN THIS MODULE (src/main/java
+      here, not reviewer-core — same as the rest of reviewer-mule's Java, called via DataWeave's
+      native Java interop, never the Mule Java Module). reviewer-mule has NO Maven dependency on
+      reviewer-core at all — review-engine.xml's run-project-review flow (which all three branches
+      below hand off to) walks the directory via the Mule File Connector, then evaluates XML/pom/
+      Swagger rules via its OWN small Java rule-evaluation library
+      (com.governanceplus.reviewermule.ruleengine — XPathEvaluator, PomDependencyValidator,
+      SwaggerRuleEvaluator, copied/trimmed from reviewer-core, not depended on). Rules come straight
+      from the H2 DB rules-crud.xml manages, not a rules.json file — a rule added via
+      POST /api/rules/xml is now immediately visible to a review.
+
+      No http:listener here — global.xml's apikit:router (RAML-based, reviewer-mule-api.raml)
+      reaches this flow via api-router-bindings.xml's flow-ref, not by name matching directly.
+    -->
+
+    <flow name="submit-review">
+        <!-- payload.parts is only a valid accessor when the request actually IS multipart/form-data
+             — evaluating it against a plain application/json payload throws immediately ("Expecting
+             type is {preamble?, parts:...} but got String, while writing MultiPart"), before
+             `default` ever gets a chance to rescue it. So branch on the real Content-Type header
+             FIRST and never touch payload.parts on a JSON request.
+
+             Every value below uses a full %dw script with an explicit `output application/java`
+             instead of a bare #[...] expression — without that, DataWeave infers the value
+             attribute's OUTPUT writer from the INBOUND message's mimetype (multipart/form-data for
+             a real file upload), so a plain String result was being run back through a multipart
+             WRITER and failing with that same "Expecting type {preamble?, parts:...} but got
+             String" error, even for the multipart branch that's supposed to work. -->
+        <choice>
+            <when expression="#[(attributes.headers.'content-type' default '') startsWith 'multipart/']">
+                <set-variable variableName="projectPath" value="#[%dw 2.0
+output application/java
+---
+(payload.parts.projectPath.content default '') as String]" />
+                <set-variable variableName="zipBytes" value="#[%dw 2.0
+output application/java
+---
+payload.parts.file.content default null]" />
+                <set-variable variableName="gitUrl" value="#[%dw 2.0
+output application/java
+---
+(payload.parts.gitUrl.content default '') as String]" />
+                <set-variable variableName="gitBranch" value="#[%dw 2.0
+output application/java
+---
+(payload.parts.gitBranch.content default '') as String]" />
+                <set-variable variableName="gitUsername" value="#[%dw 2.0
+output application/java
+---
+(payload.parts.gitUsername.content default '') as String]" />
+                <set-variable variableName="gitToken" value="#[%dw 2.0
+output application/java
+---
+(payload.parts.gitToken.content default '') as String]" />
+            </when>
+            <otherwise>
+                <set-variable variableName="projectPath" value="#[%dw 2.0
+output application/java
+---
+(payload.projectPath default '') as String]" />
+                <set-variable variableName="zipBytes" value="#[null]" />
+                <set-variable variableName="gitUrl" value="#[%dw 2.0
+output application/java
+---
+(payload.gitUrl default '') as String]" />
+                <set-variable variableName="gitBranch" value="#[%dw 2.0
+output application/java
+---
+(payload.gitBranch default '') as String]" />
+                <set-variable variableName="gitUsername" value="#[%dw 2.0
+output application/java
+---
+(payload.gitUsername default '') as String]" />
+                <set-variable variableName="gitToken" value="#[%dw 2.0
+output application/java
+---
+(payload.gitToken default '') as String]" />
+            </otherwise>
+        </choice>
+
+        <!-- zipBytes/projectPath/gitUrl/gitBranch are captured above — payload itself isn't needed
+             again, so reset it to a neutral, non-multipart mimetype now. Otherwise the event's
+             message stays typed as multipart/form-data for the rest of this flow AND everything
+             run-project-review does after the flow-ref below, and every bare #[...] expression from
+             here on (not just ones that touch payload) risks the same implicit-mimetype coercion
+             into a multipart writer that caused the "Expecting type {preamble?, parts:...} but got
+             String" error. -->
+        <set-payload value="#[null]" mimeType="application/java" />
+
+        <!-- Exactly one of the three sources — counted rather than chained boolean checks, since a
+             3-way "exactly one" is clearer as a count than as pairwise comparisons. -->
+        <set-variable variableName="sourceCount" value="#[%dw 2.0
+output application/java
+---
+sizeOf([vars.zipBytes != null, not isEmpty(vars.projectPath), not isEmpty(vars.gitUrl)] filter ($ == true))]" />
+
+        <choice>
+            <when expression="#[vars.sourceCount == 0]">
+                <raise-error type="APP:BAD_REQUEST"
+                             description="Provide exactly one of `file` (zip upload), `projectPath` (server-side path), or `gitUrl`+`gitBranch` (a Git repo to clone)." />
+            </when>
+            <when expression="#[vars.sourceCount > 1]">
+                <raise-error type="APP:BAD_REQUEST"
+                             description="Provide exactly one of `file`, `projectPath`, or `gitUrl`+`gitBranch` — not more than one." />
+            </when>
+            <when expression="#[!isEmpty(vars.gitUrl) and isEmpty(vars.gitBranch)]">
+                <raise-error type="APP:BAD_REQUEST" description="gitBranch is required when gitUrl is provided." />
+            </when>
+        </choice>
+
+        <choice>
+            <when expression="#[vars.zipBytes != null]">
+                <!-- Extraction is still Java (ProjectZipExtractor — see this file's top comment for
+                     why); everything after this line is native Mule. -->
+                <set-variable variableName="projectDir" value='#[%dw 2.0&#10;import * from java!com::governanceplus::reviewermule::ProjectZipExtractor&#10;output application/java&#10;---&#10;extractZipAsPath(vars.zipBytes, "${zip.extraction.dir}")]' />
+
+                <flow-ref name="run-project-review" />
+
+                <!-- Best-effort cleanup regardless of how the review went; a stray temp dir isn't
+                     worth failing the response over. -->
+                <try>
+                    <set-variable variableName="reviewPayload" value="#[payload]" />
+                    <set-variable variableName="_cleanupResult" value="#[%dw 2.0&#10;import * from java!com::governanceplus::reviewermule::ProjectZipExtractor&#10;output application/java&#10;---&#10;cleanupPath(vars.projectDir)]" />
+                    <set-payload value="#[vars.reviewPayload]" mimeType="application/json" />
+                    <error-handler>
+                        <on-error-continue type="ANY">
+                            <set-payload value="#[vars.reviewPayload]" mimeType="application/json" />
+                        </on-error-continue>
+                    </error-handler>
+                </try>
+            </when>
+            <when expression="#[not isEmpty(vars.gitUrl)]">
+                <!-- Clone is Java (GitFetcher — pure JGit, no native git executable needed); a
+                     failed clone (bad URL, unknown branch, network issue) is treated as a 400 —
+                     from the caller's point of view, a repo/branch we can't reach is bad input,
+                     not a server fault. -->
+                <try>
+                    <set-variable variableName="projectDir" value='#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::io::GitFetcher
+output application/java
+---
+cloneRepositoryAsPath(vars.gitUrl, vars.gitBranch, vars.gitUsername, vars.gitToken)]' />
+                    <error-handler>
+                        <on-error-continue type="ANY">
+                            <raise-error type="APP:BAD_REQUEST"
+                                         description="#['Could not clone ' ++ vars.gitUrl ++ ' (branch: ' ++ vars.gitBranch ++ '): ' ++ (error.description default 'unknown error')]" />
+                        </on-error-continue>
+                    </error-handler>
+                </try>
+
+                <flow-ref name="run-project-review" />
+
+                <!-- Best-effort cleanup regardless of how the review went; a stray temp clone
+                     isn't worth failing the response over. -->
+                <try>
+                    <set-variable variableName="reviewPayload" value="#[payload]" />
+                    <set-variable variableName="_cleanupResult" value="#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::io::GitFetcher
+output application/java
+---
+cleanupPath(vars.projectDir)]" />
+                    <set-payload value="#[vars.reviewPayload]" mimeType="application/json" />
+                    <error-handler>
+                        <on-error-continue type="ANY">
+                            <set-payload value="#[vars.reviewPayload]" mimeType="application/json" />
+                        </on-error-continue>
+                    </error-handler>
+                </try>
+            </when>
+            <otherwise>
+                <set-variable variableName="projectDir" value="#[vars.projectPath]" />
+
+                <!-- Directory-existence check, natively: file:list on the given path throws
+                     FILE:ILLEGAL_PATH if it doesn't exist or isn't a directory — no more Java
+                     File#isDirectory() call needed for this. -->
+                <try>
+                    <file:list config-ref="local-file-config" directoryPath="#[vars.projectDir]" recursive="false" target="_dirCheck" />
+                    <error-handler>
+                        <on-error-continue type="FILE:ILLEGAL_PATH, FILE:CONNECTIVITY">
+                            <raise-error type="APP:BAD_REQUEST" description="#['Not a directory on the server\'s filesystem: ' ++ vars.projectDir]" />
+                        </on-error-continue>
+                    </error-handler>
+                </try>
+
+                <flow-ref name="run-project-review" />
+            </otherwise>
+        </choice>
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+</mule>

@@ -19,5 +19,6 @@
     <modules>
         <module>reviewer-core</module>
         <module>reviewer-web</module>
+        <module>reviewer-ai</module>
     </modules>
 </project>

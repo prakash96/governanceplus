@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+
+    <!--
+      Mirrors reviewer-web's RulesController one-to-one: CRUD over rules storage (XML/pom/Swagger
+      rule categories) — now DB-backed (db:select/insert/update/delete against rules-db-config, see
+      global.xml) instead of a rules.json file. "Already exists" (409) / "not found" (404) /
+      "blank id" (400) are signaled with raise-error, mapped to HTTP statuses by global.xml's
+      api-error-handler — same as before, just checked with a SELECT COUNT(*) instead of scanning a
+      DataWeave array. No Java anywhere in this file, same as the file-based version it replaced.
+
+      Every add/update/delete flow below starts with <flow-ref name="require-admin"/> (see
+      auth.xml) — mutating rules requires a valid admin `Authorization: Basic <token>` header,
+      raising APP:UNAUTHORIZED (401) otherwise. get-rules has NO such guard: listing rules is
+      "guest" (unauthenticated) access, same as running a review or testing a rule.
+
+      No http:listener on any flow here — global.xml's apikit:router (RAML-based,
+      reviewer-mule-api.raml) reaches these flows via api-router-bindings.xml's flow-refs, not by
+      name matching directly.
+    -->
+
+    <flow name="get-rules" doc:id="566208a7-0b97-40b7-a696-4d0f20410426">
+
+        <db:select config-ref="rules-db-config" target="xmlRows">
+            <db:sql>SELECT * FROM XML_RULES</db:sql>
+        </db:select>
+        <db:select config-ref="rules-db-config" target="pomRows">
+            <db:sql>SELECT * FROM POM_RULES</db:sql>
+        </db:select>
+        <db:select config-ref="rules-db-config" target="swaggerRows">
+            <db:sql>SELECT * FROM SWAGGER_RULES</db:sql>
+        </db:select>
+
+        <set-payload value="#[output application/json --- {
+            rules: vars.xmlRows map (r) -> {
+                id: r.ID, category: r.CATEGORY, severity: r.SEVERITY, description: r.DESCRIPTION,
+                xpath: r.XPATH, projectNamePattern: r.PROJECT_NAME_PATTERN
+            },
+            pomRules: vars.pomRows map (r) -> {
+                artifactId: r.ARTIFACT_ID, minVersion: r.MIN_VERSION, projectNamePattern: r.PROJECT_NAME_PATTERN
+            },
+            swaggerRules: vars.swaggerRows map (r) -> {
+                id: r.ID, category: r.CATEGORY, severity: r.SEVERITY, description: r.DESCRIPTION,
+                jsonPath: r.JSON_PATH, projectNamePattern: r.PROJECT_NAME_PATTERN,
+                selection: r.SELECTION, operator: r.OPERATOR, value: r.VALUE_TEXT
+            }
+        }]" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <!-- XML rules (keyed by id) -->
+
+    <flow name="add-xml-rule" doc:id="c70c2db7-fe68-4be3-a4a3-3b21e3835647">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.id default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="id must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existing">
+            <db:sql>SELECT COUNT(*) AS CNT FROM XML_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.newRule.id }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existing[0].CNT > 0]">
+                <raise-error type="APP:CONFLICT" description="#['XML rule already exists: ' ++ vars.newRule.id]" />
+            </when>
+        </choice>
+
+        <db:insert config-ref="rules-db-config">
+            <db:sql>INSERT INTO XML_RULES (ID, CATEGORY, SEVERITY, DESCRIPTION, XPATH, PROJECT_NAME_PATTERN)
+                VALUES (:id, :category, :severity, :description, :xpath, :projectNamePattern)</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                id: vars.newRule.id,
+                category: (vars.newRule.category default null),
+                severity: (vars.newRule.severity default null),
+                description: (vars.newRule.description default null),
+                xpath: (vars.newRule.xpath default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null)
+            }]]]></db:input-parameters>
+        </db:insert>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="update-xml-rule" doc:id="d9179ac0-40dd-4c5f-b837-59e608a70aac">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetId" value="#[attributes.uriParams.id]" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.id default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="id must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existingTarget">
+            <db:sql>SELECT COUNT(*) AS CNT FROM XML_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.targetId }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existingTarget[0].CNT == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['XML rule not found: ' ++ vars.targetId]" />
+            </when>
+        </choice>
+
+        <choice>
+            <when expression="#[vars.newRule.id != vars.targetId]">
+                <db:select config-ref="rules-db-config" target="existingNewId">
+                    <db:sql>SELECT COUNT(*) AS CNT FROM XML_RULES WHERE ID = :id</db:sql>
+                    <db:input-parameters><![CDATA[#[{ id: vars.newRule.id }]]]></db:input-parameters>
+                </db:select>
+                <choice>
+                    <when expression="#[vars.existingNewId[0].CNT > 0]">
+                        <raise-error type="APP:CONFLICT" description="#['XML rule already exists: ' ++ vars.newRule.id]" />
+                    </when>
+                </choice>
+            </when>
+        </choice>
+
+        <db:update config-ref="rules-db-config">
+            <db:sql>UPDATE XML_RULES SET ID = :newId, CATEGORY = :category, SEVERITY = :severity, DESCRIPTION = :description,
+                XPATH = :xpath, PROJECT_NAME_PATTERN = :projectNamePattern
+                WHERE ID = :targetId</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                newId: vars.newRule.id,
+                category: (vars.newRule.category default null),
+                severity: (vars.newRule.severity default null),
+                description: (vars.newRule.description default null),
+                xpath: (vars.newRule.xpath default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null),
+                targetId: vars.targetId
+            }]]]></db:input-parameters>
+        </db:update>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="delete-xml-rule" doc:id="ef202597-b1ae-407b-a811-13a8679ff6fc">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetId" value="#[attributes.uriParams.id]" />
+
+        <db:delete config-ref="rules-db-config" target="deletedCount">
+            <db:sql>DELETE FROM XML_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.targetId }]]]></db:input-parameters>
+        </db:delete>
+
+        <choice>
+            <when expression="#[vars.deletedCount == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['XML rule not found: ' ++ vars.targetId]" />
+            </when>
+        </choice>
+
+        <set-payload value="#[null]" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <!-- Pom rules (keyed by artifactId) -->
+
+    <flow name="add-pom-rule" doc:id="3dfbff14-1d30-4b7a-b829-7ea3e23024cf">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.artifactId default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="artifactId must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existing">
+            <db:sql>SELECT COUNT(*) AS CNT FROM POM_RULES WHERE ARTIFACT_ID = :artifactId</db:sql>
+            <db:input-parameters><![CDATA[#[{ artifactId: vars.newRule.artifactId }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existing[0].CNT > 0]">
+                <raise-error type="APP:CONFLICT" description="#['Pom rule already exists: ' ++ vars.newRule.artifactId]" />
+            </when>
+        </choice>
+
+        <db:insert config-ref="rules-db-config">
+            <db:sql>INSERT INTO POM_RULES (ARTIFACT_ID, MIN_VERSION, PROJECT_NAME_PATTERN) VALUES (:artifactId, :minVersion, :projectNamePattern)</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                artifactId: vars.newRule.artifactId,
+                minVersion: (vars.newRule.minVersion default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null)
+            }]]]></db:input-parameters>
+        </db:insert>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="update-pom-rule" doc:id="a3c56dbe-580c-4d4b-bc51-3deabe2f9925">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetArtifactId" value="#[attributes.uriParams.artifactId]" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.artifactId default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="artifactId must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existingTarget">
+            <db:sql>SELECT COUNT(*) AS CNT FROM POM_RULES WHERE ARTIFACT_ID = :artifactId</db:sql>
+            <db:input-parameters><![CDATA[#[{ artifactId: vars.targetArtifactId }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existingTarget[0].CNT == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['Pom rule not found: ' ++ vars.targetArtifactId]" />
+            </when>
+        </choice>
+
+        <choice>
+            <when expression="#[vars.newRule.artifactId != vars.targetArtifactId]">
+                <db:select config-ref="rules-db-config" target="existingNewId">
+                    <db:sql>SELECT COUNT(*) AS CNT FROM POM_RULES WHERE ARTIFACT_ID = :artifactId</db:sql>
+                    <db:input-parameters><![CDATA[#[{ artifactId: vars.newRule.artifactId }]]]></db:input-parameters>
+                </db:select>
+                <choice>
+                    <when expression="#[vars.existingNewId[0].CNT > 0]">
+                        <raise-error type="APP:CONFLICT" description="#['Pom rule already exists: ' ++ vars.newRule.artifactId]" />
+                    </when>
+                </choice>
+            </when>
+        </choice>
+
+        <db:update config-ref="rules-db-config">
+            <db:sql>UPDATE POM_RULES SET ARTIFACT_ID = :newArtifactId, MIN_VERSION = :minVersion, PROJECT_NAME_PATTERN = :projectNamePattern
+                WHERE ARTIFACT_ID = :targetArtifactId</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                newArtifactId: vars.newRule.artifactId,
+                minVersion: (vars.newRule.minVersion default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null),
+                targetArtifactId: vars.targetArtifactId
+            }]]]></db:input-parameters>
+        </db:update>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="delete-pom-rule" doc:id="e0ccc25a-2b7f-4f39-802c-216841f14e1f">
+
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetArtifactId" value="#[attributes.uriParams.artifactId]" />
+
+        <db:delete config-ref="rules-db-config" target="deletedCount">
+            <db:sql>DELETE FROM POM_RULES WHERE ARTIFACT_ID = :artifactId</db:sql>
+            <db:input-parameters><![CDATA[#[{ artifactId: vars.targetArtifactId }]]]></db:input-parameters>
+        </db:delete>
+
+        <choice>
+            <when expression="#[vars.deletedCount == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['Pom rule not found: ' ++ vars.targetArtifactId]" />
+            </when>
+        </choice>
+
+        <set-payload value="#[null]" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <!-- Swagger rules (keyed by id) -->
+
+    <flow name="add-swagger-rule" doc:id="87fb0e93-e409-4b13-a571-4cdcc3c13b2f">
+        <flow-ref name="require-admin" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.id default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="id must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existing">
+            <db:sql>SELECT COUNT(*) AS CNT FROM SWAGGER_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.newRule.id }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existing[0].CNT > 0]">
+                <raise-error type="APP:CONFLICT" description="#['Swagger rule already exists: ' ++ vars.newRule.id]" />
+            </when>
+        </choice>
+
+        <db:insert config-ref="rules-db-config">
+            <db:sql>INSERT INTO SWAGGER_RULES (ID, CATEGORY, SEVERITY, DESCRIPTION, JSON_PATH, PROJECT_NAME_PATTERN, SELECTION, OPERATOR, VALUE_TEXT)
+                VALUES (:id, :category, :severity, :description, :jsonPath, :projectNamePattern, :selection, :operator, :value)</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                id: vars.newRule.id,
+                category: (vars.newRule.category default null),
+                severity: (vars.newRule.severity default null),
+                description: (vars.newRule.description default null),
+                jsonPath: (vars.newRule.jsonPath default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null),
+                selection: (vars.newRule.selection default null),
+                operator: (vars.newRule.operator default null),
+                value: (vars.newRule.value default null)
+            }]]]></db:input-parameters>
+        </db:insert>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="update-swagger-rule" doc:id="77ae9a1e-7ed1-4444-aefe-39c56e8a0f86">
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetId" value="#[attributes.uriParams.id]" />
+        <set-variable variableName="newRule" value="#[payload]" />
+
+        <choice>
+            <when expression="#[isEmpty(vars.newRule.id default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="id must not be blank" />
+            </when>
+        </choice>
+
+        <db:select config-ref="rules-db-config" target="existingTarget">
+            <db:sql>SELECT COUNT(*) AS CNT FROM SWAGGER_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.targetId }]]]></db:input-parameters>
+        </db:select>
+
+        <choice>
+            <when expression="#[vars.existingTarget[0].CNT == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['Swagger rule not found: ' ++ vars.targetId]" />
+            </when>
+        </choice>
+
+        <choice>
+            <when expression="#[vars.newRule.id != vars.targetId]">
+                <db:select config-ref="rules-db-config" target="existingNewId">
+                    <db:sql>SELECT COUNT(*) AS CNT FROM SWAGGER_RULES WHERE ID = :id</db:sql>
+                    <db:input-parameters><![CDATA[#[{ id: vars.newRule.id }]]]></db:input-parameters>
+                </db:select>
+                <choice>
+                    <when expression="#[vars.existingNewId[0].CNT > 0]">
+                        <raise-error type="APP:CONFLICT" description="#['Swagger rule already exists: ' ++ vars.newRule.id]" />
+                    </when>
+                </choice>
+            </when>
+        </choice>
+
+        <db:update config-ref="rules-db-config">
+            <db:sql>UPDATE SWAGGER_RULES SET ID = :newId, CATEGORY = :category, SEVERITY = :severity, DESCRIPTION = :description,
+                JSON_PATH = :jsonPath, PROJECT_NAME_PATTERN = :projectNamePattern, SELECTION = :selection, OPERATOR = :operator, VALUE_TEXT = :value
+                WHERE ID = :targetId</db:sql>
+            <db:input-parameters><![CDATA[#[{
+                newId: vars.newRule.id,
+                category: (vars.newRule.category default null),
+                severity: (vars.newRule.severity default null),
+                description: (vars.newRule.description default null),
+                jsonPath: (vars.newRule.jsonPath default null),
+                projectNamePattern: (vars.newRule.projectNamePattern default null),
+                selection: (vars.newRule.selection default null),
+                operator: (vars.newRule.operator default null),
+                value: (vars.newRule.value default null),
+                targetId: vars.targetId
+            }]]]></db:input-parameters>
+        </db:update>
+
+        <set-payload value="#[vars.newRule]" mimeType="application/json" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="delete-swagger-rule" doc:id="154bd328-324b-4d15-bf81-3d9a3200f200">
+        <flow-ref name="require-admin" />
+        <set-variable variableName="targetId" value="#[attributes.uriParams.id]" />
+
+        <db:delete config-ref="rules-db-config" target="deletedCount">
+            <db:sql>DELETE FROM SWAGGER_RULES WHERE ID = :id</db:sql>
+            <db:input-parameters><![CDATA[#[{ id: vars.targetId }]]]></db:input-parameters>
+        </db:delete>
+
+        <choice>
+            <when expression="#[vars.deletedCount == 0]">
+                <raise-error type="APP:NOT_FOUND" description="#['Swagger rule not found: ' ++ vars.targetId]" />
+            </when>
+        </choice>
+
+        <set-payload value="#[null]" />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+</mule>

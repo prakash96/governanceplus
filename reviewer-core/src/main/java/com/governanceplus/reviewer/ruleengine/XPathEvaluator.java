@@ -2,10 +2,12 @@ package com.governanceplus.reviewer.ruleengine;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.governanceplus.reviewer.ruleengine.model.Rule;
 import com.governanceplus.reviewer.ruleengine.model.Violation;
 import com.ximpleware.*;
@@ -17,6 +19,27 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 public class XPathEvaluator {
+
+    /**
+     * DataWeave-callable convenience wrapper (`import * from java!...XPathEvaluator` in a Mule
+     * flow) — DataWeave's native Java interop only supports static methods whose parameters and
+     * return type are DataWeave-representable (string/number/boolean/array/object), not arbitrary
+     * File/Rule/List&lt;Violation&gt; objects, so this takes/returns plain strings: writes
+     * sampleXml to a temp file, evaluates one ad-hoc rule against it (mirroring the "test on
+     * sample" feature), and returns the violations as a JSON array string for the caller to parse.
+     */
+    public static String evaluateXmlSample(String xpath, String usageAttribute, String usagePattern, String sampleXml) throws Exception {
+        Path tempFile = Files.createTempFile("rule-test-", ".xml");
+        try {
+            Files.writeString(tempFile, sampleXml);
+            File file = tempFile.toFile();
+            Rule rule = new Rule("TEST", "TEST", "INFO", "Test rule", xpath, usageAttribute, usagePattern);
+            List<Violation> violations = new XPathEvaluator().evaluate(file, List.of(rule), List.of(file));
+            return new ObjectMapper().writeValueAsString(violations);
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
 
     private final Map<File, String> fileContents = new HashMap<>();
 

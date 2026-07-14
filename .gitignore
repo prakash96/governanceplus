@@ -8,3 +8,6 @@ dependency-reduced-pom.xml
 # Local model files — commit only the split zips under models/chunks/
 models/*.gguf
 out/
+
+# Personal Claude Code overrides — not shared with the team
+.claude/settings.local.json

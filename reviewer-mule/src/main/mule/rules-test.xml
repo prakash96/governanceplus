@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!--
+      Mirrors reviewer-web's RuleTestController. All three flows call reviewer-mule's own Java
+      rule-evaluation classes (src/main/java/com/governanceplus/reviewermule/ruleengine — copied
+      and trimmed from reviewer-core, not a dependency on it) via DataWeave's native Java interop
+      (`import * from java!...`, never the Mule Java Module) — same engine review-engine.xml uses
+      for a real review, just against one pasted sample instead of a whole project tree, so
+      "test this rule" and "run a review" can't disagree with each other:
+        - test-xml-rule: XPathEvaluator#evaluateXmlSampleAsJson (namespace-unaware XPath).
+        - test-pom-rule: PomDependencyValidator#validateSample.
+        - test-swagger-rule: SwaggerRuleEvaluator#evaluateSwaggerSample (real Jayway JsonPath).
+
+      No usageAttribute/usagePattern "is this variable used elsewhere" convention anymore (removed
+      by request) — every XPath match is a violation directly. test-xml-rule reports real line
+      numbers (XPathEvaluator stamps each element with its source line while parsing); test-pom-rule
+      and test-swagger-rule still report line: -1, matching the original reviewer-core engine
+      (neither category ever tracked line numbers, even there).
+
+      No http:listener on any flow here — global.xml's apikit:router (RAML-based,
+      reviewer-mule-api.raml) reaches these flows via api-router-bindings.xml's flow-refs, not by
+      name matching directly.
+    -->
+
+    <flow name="test-xml-rule" doc:id="8a38c3cb-497e-41a1-abae-c8a1a103b3b4">
+
+        <set-variable variableName="testRequest" value="#[payload]" />
+        <choice>
+            <when expression="#[isEmpty(vars.testRequest.sampleXml default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="Sample content must not be blank" />
+            </when>
+        </choice>
+
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::XPathEvaluator
+output application/json
+var violationsJson = evaluateXmlSampleAsJson(
+    vars.testRequest.xpath,
+    (vars.testRequest.description default "Test rule matched"),
+    vars.testRequest.sampleXml
+)
+var violations = read(violationsJson, "application/json")
+---
+{ matched: sizeOf(violations) > 0, violations: violations map ((v) -> { message: v.message, line: v.line }) }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="test-pom-rule" doc:id="0afdc5a0-de2e-45c4-b3d6-2020ed8b72b1">
+
+        <set-variable variableName="testRequest" value="#[payload]" />
+        <choice>
+            <when expression="#[isEmpty(vars.testRequest.samplePom default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="Sample content must not be blank" />
+            </when>
+        </choice>
+
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::PomDependencyValidator
+output application/json
+var violationsJson = validateSample(
+    vars.testRequest.artifactId,
+    vars.testRequest.minVersion,
+    vars.testRequest.samplePom
+)
+var violations = read(violationsJson, "application/json")
+---
+{ matched: sizeOf(violations) > 0, violations: violations map ((v) -> { message: v.message, line: v.line }) }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <flow name="test-swagger-rule" doc:id="1497df4b-df2b-475b-8481-2deff6377169">
+
+        <set-variable variableName="testRequest" value="#[payload]" />
+        <choice>
+            <when expression="#[isEmpty(vars.testRequest.sampleSpec default '')]">
+                <raise-error type="APP:BAD_REQUEST" description="Sample content must not be blank" />
+            </when>
+        </choice>
+
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+import * from java!com::governanceplus::reviewermule::ruleengine::SwaggerRuleEvaluator
+output application/json
+var violationsJson = evaluateSwaggerSample(
+    vars.testRequest.jsonPath,
+    vars.testRequest.sampleSpec
+)
+var violations = read(violationsJson, "application/json")
+---
+{ matched: sizeOf(violations) > 0, violations: violations map ((v) -> { message: v.message, line: v.line }) }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+</mule>

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+    <!--
+      Deliberately simple admin auth — no database, no session store, no JWT. Credentials live in
+      global.xml's admin.username/admin.password global properties;
+      com.governanceplus.reviewermule.auth.AdminAuth does the actual credential/token checking
+      (called via DataWeave's native Java interop, never the Mule Java Module).
+
+      "login" (POST /api/auth/login) checks a submitted username/password against those properties
+      and, on success, hands back a token — literally the HTTP Basic-Auth encoding of those same
+      credentials (base64 of "username:password"). There's nothing server-side to store or expire:
+      every subsequent mutating request just re-sends that token as a standard
+      `Authorization: Basic <token>` header, re-verified against the same global properties by the
+      require-admin sub-flow below.
+
+      require-admin is flow-ref'd as the FIRST step of every rule add/update/delete flow in
+      rules-crud.xml — GET /api/rules (read-only, "guest" access) is NOT gated by it. A missing,
+      malformed, or wrong Authorization header all raise APP:UNAUTHORIZED (401 — see global.xml's
+      api-error-handler), the same as wrong login credentials. Raising the error from inside a
+      sub-flow works the same as raising it directly in the caller: a sub-flow has no error-handling
+      scope of its own, so it propagates straight up to whichever flow called it via flow-ref, and
+      that flow's own <error-handler ref="api-error-handler"> builds the 401 response.
+
+      No http:listener here — global.xml's apikit:router (RAML-based, reviewer-mule-api.raml)
+      reaches "login" via api-router-bindings.xml's flow-ref, not by name matching directly.
+    -->
+
+    <flow name="login">
+        <set-variable variableName="loginRequest" value="#[payload]" />
+
+        <set-variable variableName="credentialsValid" value="#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::auth::AdminAuth
+output application/java
+---
+checkCredentials(vars.loginRequest.username, vars.loginRequest.password, p('admin.username'), p('admin.password'))]" />
+
+        <choice>
+            <when expression="#[not vars.credentialsValid]">
+                <raise-error type="APP:UNAUTHORIZED" description="Invalid username or password" />
+            </when>
+        </choice>
+
+        <set-payload value='#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::auth::AdminAuth
+output application/json
+---
+{
+    role: "ADMIN",
+    token: encodeToken(vars.loginRequest.username, vars.loginRequest.password)
+}]' />
+
+        <error-handler ref="api-error-handler" />
+    </flow>
+
+    <sub-flow name="require-admin">
+        <set-variable variableName="isAdminRequest" value="#[%dw 2.0
+import * from java!com::governanceplus::reviewermule::auth::AdminAuth
+output application/java
+---
+isValidAuthorizationHeader(attributes.headers.authorization default null, p('admin.username'), p('admin.password'))]" />
+
+        <choice>
+            <when expression="#[not vars.isAdminRequest]">
+                <raise-error type="APP:UNAUTHORIZED" description="Admin authentication required" />
+            </when>
+        </choice>
+    </sub-flow>
+</mule>

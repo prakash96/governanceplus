@@ -1,0 +1,292 @@
+#%RAML 1.0
+title: GovernancePlus Reviewer API
+version: v1
+mediaType: application/json
+
+types:
+  XmlRule:
+    type: object
+    properties:
+      id: string
+      category?: string
+      severity?: string
+      description?: string
+      xpath?: string
+      projectNamePattern: string | nil
+  PomRule:
+    type: object
+    properties:
+      artifactId: string
+      minVersion?: string
+      projectNamePattern?: string | nil
+  SwaggerRule:
+    type: object
+    properties:
+      id: string
+      category?: string
+      severity?: string
+      description?: string
+      jsonPath?: string
+      projectNamePattern?: string | nil
+      selection?: string
+      operator?: string
+      value?: string
+  LoginRequest:
+    type: object
+    properties:
+      username: string
+      password: string
+  LoginResponse:
+    type: object
+    properties:
+      role: string
+      # HTTP Basic-Auth encoding of the credentials just verified (base64 of "username:password") —
+      # send back as `Authorization: Basic <token>` on every rule add/update/delete request.
+      token: string
+
+/auth/login:
+  post:
+    displayName: login
+    description: >
+      Checks a username/password against the admin credentials configured in global.xml
+      (admin.username/admin.password) and, on success, returns a token to use as
+      `Authorization: Basic <token>` on rule add/update/delete requests. No session is created —
+      the token is just the Basic-Auth encoding of the credentials, re-verified on every request.
+    body:
+      application/json:
+        type: LoginRequest
+    responses:
+      200:
+        description: '{ role: "ADMIN", token }'
+        body:
+          application/json:
+            type: LoginResponse
+      401:
+        description: Invalid username or password
+
+/reviews:
+  post:
+    displayName: submit-review
+    description: >
+      Submit a project for a synchronous review — provide EXACTLY ONE of `file` (a project zip,
+      extracted under /opt/mule/tmp and reviewed), `projectPath` (a path already on the server's
+      filesystem), or `gitUrl` + `gitBranch` (a Git repo shallow-cloned over HTTPS via JGit — no
+      native git executable required on the server). For a private repo, optionally also send
+      `gitUsername` + `gitToken` (a personal access token as the password, with any non-empty
+      username — check your provider's current token-auth conventions); if omitted, falls back to
+      GIT_USERNAME/GIT_TOKEN environment variables on the server. Credentials are never echoed
+      back in error messages.
+    body:
+      application/json:
+        properties:
+          projectPath?: string
+          gitUrl?: string
+          gitBranch?: string
+          gitUsername?: string
+          gitToken?: string
+      multipart/form-data:
+        properties:
+          file?:
+            type: file
+          projectPath?: string
+          gitUrl?: string
+          gitBranch?: string
+          gitUsername?: string
+          gitToken?: string
+    responses:
+      200:
+        description: The deterministic rule-engine review report
+      400:
+        description: Missing/invalid projectPath, gitUrl/gitBranch (including a failed clone), or more than one source provided
+
+/rules:
+  get:
+    displayName: get-rules
+    description: List every XML, pom, and Swagger rule
+    responses:
+      200:
+        description: All rules currently in storage
+
+/rules/xml:
+  post:
+    displayName: add-xml-rule
+    description: Add an XML/Mule-flow (XPath) rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: XmlRule
+    responses:
+      200:
+        description: Created
+      400:
+        description: Blank id
+      401:
+        description: Missing/invalid admin Authorization header
+      409:
+        description: A rule with this id already exists
+
+/rules/xml/{id}:
+  put:
+    displayName: update-xml-rule
+    description: Update an XML/Mule-flow rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: XmlRule
+    responses:
+      200:
+        description: Updated
+      400:
+        description: Blank id
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule with this id
+      409:
+        description: Renaming to an id that already exists
+  delete:
+    displayName: delete-xml-rule
+    description: Delete an XML/Mule-flow rule — requires admin (see /auth/login)
+    responses:
+      204:
+        description: Deleted
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule with this id
+
+/rules/pom:
+  post:
+    displayName: add-pom-rule
+    description: Add a pom.xml minimum-dependency-version rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: PomRule
+    responses:
+      200:
+        description: Created
+      400:
+        description: Blank artifactId
+      401:
+        description: Missing/invalid admin Authorization header
+      409:
+        description: A rule for this artifactId already exists
+
+/rules/pom/{artifactId}:
+  put:
+    displayName: update-pom-rule
+    description: Update a pom.xml minimum-dependency-version rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: PomRule
+    responses:
+      200:
+        description: Updated
+      400:
+        description: Blank artifactId
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule for this artifactId
+      409:
+        description: Renaming to an artifactId that already exists
+  delete:
+    displayName: delete-pom-rule
+    description: Delete a pom.xml minimum-dependency-version rule — requires admin (see /auth/login)
+    responses:
+      204:
+        description: Deleted
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule for this artifactId
+
+/rules/swagger:
+  post:
+    displayName: add-swagger-rule
+    description: Add a Swagger/OpenAPI JSONPath rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: SwaggerRule
+    responses:
+      200:
+        description: Created
+      400:
+        description: Blank id
+      401:
+        description: Missing/invalid admin Authorization header
+      409:
+        description: A rule with this id already exists
+
+/rules/swagger/{id}:
+  put:
+    displayName: update-swagger-rule
+    description: Update a Swagger/OpenAPI JSONPath rule — requires admin (see /auth/login)
+    body:
+      application/json:
+        type: SwaggerRule
+    responses:
+      200:
+        description: Updated
+      400:
+        description: Blank id
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule with this id
+      409:
+        description: Renaming to an id that already exists
+  delete:
+    displayName: delete-swagger-rule
+    description: Delete a Swagger/OpenAPI JSONPath rule — requires admin (see /auth/login)
+    responses:
+      204:
+        description: Deleted
+      401:
+        description: Missing/invalid admin Authorization header
+      404:
+        description: No rule with this id
+
+/rules/xml/test:
+  post:
+    displayName: test-xml-rule
+    description: Test an XPath rule against pasted sample XML — never persisted
+    body:
+      application/json:
+        properties:
+          xpath: string
+          sampleXml: string
+    responses:
+      200:
+        description: '{ matched, violations }'
+      400:
+        description: Blank sample content
+
+/rules/pom/test:
+  post:
+    displayName: test-pom-rule
+    description: Test a pom rule against a pasted sample pom.xml — never persisted
+    body:
+      application/json:
+        properties:
+          artifactId: string
+          minVersion: string
+          samplePom: string
+    responses:
+      200:
+        description: '{ matched, violations }'
+      400:
+        description: Blank sample content
+
+/rules/swagger/test:
+  post:
+    displayName: test-swagger-rule
+    description: Test a JSONPath rule against a pasted sample OpenAPI spec — never persisted
+    body:
+      application/json:
+        properties:
+          jsonPath: string
+          sampleSpec: string
+    responses:
+      200:
+        description: '{ matched, violations }'
+      400:
+        description: Blank sample content

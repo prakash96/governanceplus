@@ -1,12 +1,34 @@
 import { Routes, Route, NavLink, Link } from 'react-router-dom';
 import NewReviewPage from './pages/NewReviewPage';
-import ReviewResultPage from './pages/ReviewResultPage';
 import RulesPage from './pages/RulesPage';
 import TestSamplePage from './pages/TestSamplePage';
 import AskAiPage from './pages/AskAiPage';
 import { useAssistAvailability } from './hooks/useAssistAvailability';
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import LoginModal from './components/LoginModal';
 
-export default function App() {
+function AdminStatus() {
+  const { isAdmin, openLogin, logout } = useAuth();
+
+  if (isAdmin) {
+    return (
+      <div className="admin-status">
+        <span className="badge badge-admin">Admin</span>
+        <button type="button" className="btn-ghost" onClick={logout}>
+          Log out
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button type="button" className="btn-ghost" onClick={openLogin}>
+      Admin login
+    </button>
+  );
+}
+
+function AppShell() {
   const assistAvailable = useAssistAvailability();
 
   return (
@@ -36,19 +58,30 @@ export default function App() {
               </NavLink>
             )}
           </nav>
+          <div className="no-print">
+            <AdminStatus />
+          </div>
         </div>
       </header>
       <main>
         <div className="app-main">
           <Routes>
             <Route path="/" element={<NewReviewPage />} />
-            <Route path="/reviews/:jobId" element={<ReviewResultPage />} />
             <Route path="/rules" element={<RulesPage />} />
             <Route path="/test" element={<TestSamplePage />} />
             <Route path="/ask-ai" element={<AskAiPage />} />
           </Routes>
         </div>
       </main>
+      <LoginModal />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }

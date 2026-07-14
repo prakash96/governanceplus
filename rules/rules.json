@@ -78,6 +78,39 @@
     "severity" : "WARNING",
     "description" : "Every operation should document at least one 400 error response",
     "jsonPath" : "$.paths.*.*.responses['400']",
-    "projectNamePattern" : ""
+    "projectNamePattern" : "",
+    "selection" : null,
+    "operator" : null,
+    "value" : null
+  }, {
+    "id" : "02",
+    "category" : "API",
+    "severity" : "MAJOR",
+    "description" : "",
+    "jsonPath" : "$.components.schemas.Customer[?(@.type == 'object')]",
+    "projectNamePattern" : "",
+    "selection" : "$.components.schemas.Customer.type",
+    "operator" : "EQUALS",
+    "value" : "object"
+  }, {
+    "id" : "002",
+    "category" : "Request Schema Validation",
+    "severity" : "MAJOR",
+    "description" : "max length should be defined for request string fields",
+    "jsonPath" : "$.paths.*.*.requestBody.content.*.schema.properties.*[?(@.type == 'string')][?(!@['maxLength'])]",
+    "projectNamePattern" : "",
+    "selection" : null,
+    "operator" : null,
+    "value" : null
+  }, {
+    "id" : "04",
+    "category" : "Request Schema Validation",
+    "severity" : "MAJOR",
+    "description" : "Request body schemas must set additionalProperties: false",
+    "jsonPath" : "$.paths.*.*.requestBody.content.*.schema[?(!@.additionalProperties)]",
+    "projectNamePattern" : "",
+    "selection" : "$.paths.*.*.requestBody.content.*.schema.additionalProperties",
+    "operator" : "NOT_EXISTS",
+    "value" : ""
   } ]
 }

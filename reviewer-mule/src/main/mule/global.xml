@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+        http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
+
+    <global-property name="http.port" value="8081" />
+    <!-- Where uploaded project zips get extracted before being reviewed (reviews.xml's
+         submit-review, zip-upload branch) — created if it doesn't already exist. -->
+    <global-property name="zip.extraction.dir" value="/opt/mule/tmp" />
+
+    <!-- Admin credentials for rule mutation (add/update/delete) — see auth.xml. Deliberately just
+         global properties, not a database or user-management system: there's exactly one admin
+         "account", checked via com.governanceplus.reviewermule.auth.AdminAuth. Change these before
+         any real deployment; consider moving them to a secure property placeholder
+         (${secure::admin.password}) instead of a plain value once this goes beyond local use. -->
+    <global-property name="admin.username" value="admin" />
+    <global-property name="admin.password" value="admin123" />
+
+    <http:listener-config name="reviewer-mule-httpListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="${http.port}" />
+    </http:listener-config>
+
+    <!-- Backs review-engine.xml's file:list/file:read calls that walk a reviewed project's
+         directory tree (src/main/mule, pom.xml, src/main/resources/api) — no workingDirectory set
+         so absolute paths (extracted zip temp dirs, or a caller-supplied projectPath) are used
+         as-is instead of being resolved relative to some base. -->
+    <file:config name="local-file-config">
+        <file:connection />
+    </file:config>
+
+    <!--
+      Single entry point for every endpoint. apikit:router reads reviewer-mule-api.raml and
+      dispatches by the RAML verb:path:config-name convention — see api-router-bindings.xml for
+      the (guessed, unverified) flow names that convention produces and how they hand off to the
+      real, cleanly-named implementation flows in reviews.xml/rules-crud.xml/rules-test.xml.
+
+      httpStatusVarName="httpStatus" is what lets each flow's own error-handler (on-error-CONTINUE,
+      not on-error-propagate — see api-error-handler below) communicate a non-200 status back
+      through the router, the same "httpStatus" variable every flow already sets.
+    -->
+    <apikit:config name="reviewer-mule-apikit-config" api="reviewer-mule-api.raml"
+                   outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+
+    <!-- Interactive API docs at /console — standard APIkit scaffolding, not required for the API
+         itself to work; delete this flow if you don't want it exposed. -->
+
+    <!--
+      Rules storage. In-memory H2 for now, seeded at startup from src/main/resources/schema.sql
+      (DB_CLOSE_DELAY=-1 is required — without it, H2 destroys an in-memory database as soon as its
+      last connection closes, which happens between requests under Mule's pooled db:config, wiping
+      every change made through the API). INIT=RUNSCRIPT runs schema.sql automatically on first
+      connect — no separate Mule flow needed for schema setup or seeding.
+
+      TO SWITCH TO ORACLE LATER: replace this whole db:generic-connection with something like
+        <db:generic-connection
+            url="jdbc:oracle:thin:@//host:1521/service_name"
+            driverClassName="oracle.jdbc.OracleDriver">
+          <db:pooling-profile maxPoolSize="10" />
+        </db:generic-connection>
+      plus a username/password (e.g. via secure properties, not hardcoded), and swap the
+      com.h2database:h2 dependency in pom.xml for Oracle's JDBC driver (ojdbc*.jar — not on Maven
+      Central; usually installed into the local/enterprise repo manually per Oracle's license).
+      rules-crud.xml's SQL and schema.sql's DDL are plain ANSI SQL specifically so neither should
+      need changes beyond maybe column-size tuning.
+    -->
+    <db:config name="rules-db-config">
+        <db:generic-connection
+            url="jdbc:h2:mem:rulesdb;DB_CLOSE_DELAY=-1;INIT=RUNSCRIPT FROM 'classpath:schema.sql'"
+            driverClassName="org.h2.Driver" />
+    </db:config>
+
+    <!--
+      Shared by every implementation flow (error-handler ref="api-error-handler") AND by the
+      router flow above. Flows raise-error with one of the APP:* identifiers below instead of
+      throwing a Java exception with a status field — no Java involved in signaling what HTTP
+      status a failure should map to.
+
+      on-error-CONTINUE, not on-error-propagate: a propagated error would keep bubbling up past
+      the implementation flow to the apikit:router's own error handling, which would build its own
+      generic error response instead of the {error: "..."} payload + status this sets. continue
+      marks the message "handled" — the flow (and the router that invoked it) sees a normal
+      completion with httpStatus/payload already set the way we want.
+    -->
+    <error-handler name="api-error-handler">
+        <on-error-continue type="APP:BAD_REQUEST">
+            <set-variable variableName="httpStatus" value="400" />
+            <set-payload value="#[output application/json --- { error: error.description }]" />
+        </on-error-continue>
+        <on-error-continue type="APP:NOT_FOUND">
+            <set-variable variableName="httpStatus" value="404" />
+            <set-payload value="#[output application/json --- { error: error.description }]" />
+        </on-error-continue>
+        <on-error-continue type="APP:CONFLICT">
+            <set-variable variableName="httpStatus" value="409" />
+            <set-payload value="#[output application/json --- { error: error.description }]" />
+        </on-error-continue>
+        <on-error-continue type="APP:UNAUTHORIZED">
+            <set-variable variableName="httpStatus" value="401" />
+            <set-payload value="#[output application/json --- { error: error.description }]" />
+        </on-error-continue>
+        <on-error-continue type="ANY">
+            <set-variable variableName="httpStatus" value="500" />
+            <set-payload value="#[output application/json --- { error: error.description }]" />
+        </on-error-continue>
+    </error-handler>
+</mule>

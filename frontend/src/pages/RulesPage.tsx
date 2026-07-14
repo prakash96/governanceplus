@@ -13,15 +13,36 @@ import {
   deleteSwaggerRule,
   explainRule,
 } from '../api/client';
-import type { RulesDocument, XmlRule, PomRule, SwaggerRule, RuleCategory } from '../api/client';
+import type { RulesDocument, XmlRule, PomRule, SwaggerRule, SwaggerRuleCategory, RuleCategory } from '../api/client';
+import { SWAGGER_RULE_CATEGORIES } from '../api/client';
 import Modal from '../components/Modal';
+import SwaggerConditionBuilder from '../components/SwaggerConditionBuilder';
 import { useAssistAvailability } from '../hooks/useAssistAvailability';
+import { useAuth } from '../hooks/useAuth';
 
 type Tab = 'xml' | 'pom' | 'swagger';
 
 const EMPTY_XML_RULE: XmlRule = { id: '', category: '', severity: 'MAJOR', description: '', xpath: '', usageAttribute: '', usagePattern: '', projectNamePattern: '' };
 const EMPTY_POM_RULE: PomRule = { artifactId: '', minVersion: '', projectNamePattern: '' };
-const EMPTY_SWAGGER_RULE: SwaggerRule = { id: '', category: '', severity: 'MAJOR', description: '', jsonPath: '', projectNamePattern: '' };
+const EMPTY_SWAGGER_RULE: SwaggerRule = {
+  id: '',
+  category: 'Other',
+  severity: 'MAJOR',
+  description: '',
+  jsonPath: '',
+  projectNamePattern: '',
+  selection: null,
+  operator: null,
+  value: null,
+};
+
+/** Rules saved before this categorization existed (or via the API directly) may carry any string —
+ * shown as an extra, clearly-marked option so editing one doesn't silently discard its category. */
+function swaggerCategoryOptions(current: string): string[] {
+  return (SWAGGER_RULE_CATEGORIES as string[]).includes(current) || !current
+    ? SWAGGER_RULE_CATEGORIES
+    : [current, ...SWAGGER_RULE_CATEGORIES];
+}
 
 function ProjectNamePatternField({
   value,
@@ -52,6 +73,7 @@ function projectScopeLabel(pattern: string | null | undefined): string {
 
 export default function RulesPage() {
   const assistAvailable = useAssistAvailability();
+  const { isAdmin, openLogin } = useAuth();
   const [doc, setDoc] = useState<RulesDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +100,17 @@ export default function RulesPage() {
           : 'Use the "Test Sample" page in the top menu to try an expression against sample input before saving it.'}
       </p>
 
+      {!isAdmin && (
+        <p className="subtitle">
+          You're browsing as a guest — everyone can view rules, but adding, editing, and deleting
+          requires an{' '}
+          <button type="button" className="btn-link" onClick={openLogin}>
+            admin login
+          </button>
+          .
+        </p>
+      )}
+
       <div className="filter-chips">
         <button type="button" className={`chip ${tab === 'xml' ? 'chip-active' : ''}`} onClick={() => setTab('xml')}>
           XML / Mule
@@ -94,13 +127,18 @@ export default function RulesPage() {
       {loading && <p>Loading rules…</p>}
 
       {doc && !loading && tab === 'xml' && (
-        <XmlRulesPanel rules={doc.rules} onChanged={refresh} assistAvailable={!!assistAvailable} />
+        <XmlRulesPanel rules={doc.rules} onChanged={refresh} assistAvailable={!!assistAvailable} isAdmin={isAdmin} />
       )}
       {doc && !loading && tab === 'pom' && (
-        <PomRulesPanel rules={doc.pomRules} onChanged={refresh} assistAvailable={!!assistAvailable} />
+        <PomRulesPanel rules={doc.pomRules} onChanged={refresh} assistAvailable={!!assistAvailable} isAdmin={isAdmin} />
       )}
       {doc && !loading && tab === 'swagger' && (
-        <SwaggerRulesPanel rules={doc.swaggerRules} onChanged={refresh} assistAvailable={!!assistAvailable} />
+        <SwaggerRulesPanel
+          rules={doc.swaggerRules}
+          onChanged={refresh}
+          assistAvailable={!!assistAvailable}
+          isAdmin={isAdmin}
+        />
       )}
     </div>
   );
@@ -141,10 +179,12 @@ function XmlRulesPanel({
   rules,
   onChanged,
   assistAvailable,
+  isAdmin,
 }: {
   rules: XmlRule[];
   onChanged: () => void;
   assistAvailable: boolean;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState<XmlRule | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -213,12 +253,16 @@ function XmlRulesPanel({
               </td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
-                  Edit
-                </button>
-                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
-                  Delete
-                </button>
+                {isAdmin && (
+                  <>
+                    <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
+                      Edit
+                    </button>
+                    <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
+                      Delete
+                    </button>
+                  </>
+                )}
                 {assistAvailable && <ExplainButton category="xml" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
@@ -231,9 +275,11 @@ function XmlRulesPanel({
         </tbody>
       </table>
 
-      <button type="button" onClick={() => setEditing({ ...EMPTY_XML_RULE })}>
-        Add XML rule
-      </button>
+      {isAdmin && (
+        <button type="button" onClick={() => setEditing({ ...EMPTY_XML_RULE })}>
+          Add XML rule
+        </button>
+      )}
 
       {editing && (
         <Modal
@@ -308,10 +354,12 @@ function PomRulesPanel({
   rules,
   onChanged,
   assistAvailable,
+  isAdmin,
 }: {
   rules: PomRule[];
   onChanged: () => void;
   assistAvailable: boolean;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState<PomRule | null>(null);
   const [originalArtifactId, setOriginalArtifactId] = useState<string | null>(null);
@@ -378,12 +426,16 @@ function PomRulesPanel({
               <td>{rule.minVersion}</td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="btn-ghost" onClick={() => startEdit(rule)}>
-                  Edit
-                </button>
-                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.artifactId)}>
-                  Delete
-                </button>
+                {isAdmin && (
+                  <>
+                    <button type="button" className="btn-ghost" onClick={() => startEdit(rule)}>
+                      Edit
+                    </button>
+                    <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.artifactId)}>
+                      Delete
+                    </button>
+                  </>
+                )}
                 {assistAvailable && <ExplainButton category="pom" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
@@ -396,9 +448,11 @@ function PomRulesPanel({
         </tbody>
       </table>
 
-      <button type="button" onClick={() => setEditing({ ...EMPTY_POM_RULE })}>
-        Add pom rule
-      </button>
+      {isAdmin && (
+        <button type="button" onClick={() => setEditing({ ...EMPTY_POM_RULE })}>
+          Add pom rule
+        </button>
+      )}
 
       {editing && (
         <Modal title={originalArtifactId ? 'Edit pom rule' : 'Add pom rule'} onClose={closeEditModal}>
@@ -438,10 +492,12 @@ function SwaggerRulesPanel({
   rules,
   onChanged,
   assistAvailable,
+  isAdmin,
 }: {
   rules: SwaggerRule[];
   onChanged: () => void;
   assistAvailable: boolean;
+  isAdmin: boolean;
 }) {
   const [editing, setEditing] = useState<SwaggerRule | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -465,6 +521,10 @@ function SwaggerRulesPanel({
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!editing) return;
+    if (!editing.jsonPath.trim()) {
+      setError('Pick a field and condition (or switch to raw JSONPath) before saving.');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -510,12 +570,16 @@ function SwaggerRulesPanel({
               </td>
               <td>{projectScopeLabel(rule.projectNamePattern)}</td>
               <td className="rules-table-actions">
-                <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
-                  Edit
-                </button>
-                <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
-                  Delete
-                </button>
+                {isAdmin && (
+                  <>
+                    <button type="button" className="btn-ghost" onClick={() => setEditing({ ...rule })}>
+                      Edit
+                    </button>
+                    <button type="button" className="btn-ghost btn-danger" onClick={() => handleDelete(rule.id)}>
+                      Delete
+                    </button>
+                  </>
+                )}
                 {assistAvailable && <ExplainButton category="swagger" rule={rule as unknown as Record<string, unknown>} />}
               </td>
             </tr>
@@ -528,9 +592,11 @@ function SwaggerRulesPanel({
         </tbody>
       </table>
 
-      <button type="button" onClick={() => setEditing({ ...EMPTY_SWAGGER_RULE })}>
-        Add swagger rule
-      </button>
+      {isAdmin && (
+        <button type="button" onClick={() => setEditing({ ...EMPTY_SWAGGER_RULE })}>
+          Add swagger rule
+        </button>
+      )}
 
       {editing && (
         <Modal
@@ -544,7 +610,13 @@ function SwaggerRulesPanel({
             </label>
             <label className="field">
               <span>Category</span>
-              <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} />
+              <select value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })}>
+                {swaggerCategoryOptions(editing.category).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Severity</span>
@@ -557,10 +629,15 @@ function SwaggerRulesPanel({
                 onChange={(e) => setEditing({ ...editing, description: e.target.value })}
               />
             </label>
-            <label className="field">
-              <span>JSONPath</span>
-              <textarea rows={3} value={editing.jsonPath} onChange={(e) => setEditing({ ...editing, jsonPath: e.target.value })} required />
-            </label>
+            <SwaggerConditionBuilder
+              category={(editing.category as SwaggerRuleCategory) || 'Other'}
+              jsonPath={editing.jsonPath}
+              description={editing.description}
+              selection={editing.selection}
+              operator={editing.operator}
+              value={editing.value}
+              onChange={(patch) => setEditing({ ...editing, ...patch })}
+            />
 
             <ProjectNamePatternField
               value={editing.projectNamePattern}
