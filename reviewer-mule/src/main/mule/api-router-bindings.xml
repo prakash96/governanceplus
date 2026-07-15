@@ -33,7 +33,7 @@ http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/m
 	</flow>
 	<flow name="api-router-bindingsFlow" doc:id="d0100096-f0f4-41e9-bdac-9e68b5a90621" >
 		<http:listener doc:name="Listener" doc:id="266fd6c1-db73-4dfe-b44b-57a1005961d8" config-ref="reviewer-mule-httpListenerConfig" path="/*"/>
-		<http:load-static-resource doc:name="Load static resource" doc:id="a058cd69-3e0d-47b8-b101-c7a6a0ca1ee9" resourceBasePath="C:\governanceplus\governanceplus\frontend\dist"/>
+		<http:load-static-resource doc:name="Load static resource" doc:id="a058cd69-3e0d-47b8-b101-c7a6a0ca1ee9" resourceBasePath="${mule.home}/apps/${app.name}/web/"/>
 	</flow>
 	<flow name="post:\auth\login:application\json:reviewer-mule-apikit-config">
         <flow-ref name="login" />
